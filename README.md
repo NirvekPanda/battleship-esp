@@ -198,10 +198,10 @@ depends on the page:
 | Page | Centre does |
 | --- | --- |
 | Start | confirm ONLINE or OFFLINE &mdash; the title asks a question, so it is not left by any press |
-| Rooms | join the lobby under the cursor, or rejoin your own match; **hold** to leave |
+| Rooms | join the lobby under the cursor, or rejoin your own match; **hold a second** to step back out of it |
 | Place, picker focus | take the hovered ship in hand |
 | Place, grid focus | one press turns the ship; two quickly put it down |
-| Match | fire at the cursor, via `Game::fire()`; **hold** to leave the match |
+| Match | fire at the cursor, via `Game::fire()`; **hold five seconds** to leave the match |
 | Hit / Miss / Sunk | skip the wait and go back to the board |
 
 **Everything is centred on the ink, not on the advance.** A glyph cell is 6px
@@ -232,7 +232,7 @@ core, a page selected in the browser is pixel-for-pixel what the ESP32 shows.
 | Match | the grid you are attacking, ruled all the way round: crosshair, aim readout, turn indicator (`YOUR TURN` / `THEIR TURN` / `SOLO PLAY`), and the enemy roster | your own board: your ships, the damage they have taken, a 2x2 dot on every square they have shot at and missed, and `SHIPS LEFT n/5` |
 | Hit | same, with the new hit marked | a framed `HIT` in bubble type over the ship's name |
 | Sunk | a framed announcement: the ship's name over `SUNK` | your own board |
-| Rooms | `PICK A LOBBY` and the five numbered lobbies: `N c/2` then who is in each, a tick on the one that is yours; centre joins or rejoins, holding centre leaves | the wave |
+| Rooms | `PICK A LOBBY` and the five numbered lobbies: `N c/2` then who is in each, a tick on the one that is yours; centre joins or rejoins, a second on centre steps back out &mdash; no count, there is nothing yet to warn about | the wave |
 | Returning | `RETURNING TO LOBBY` over the wave, while centre is held | the count, 5 to 1, on a blacked-out panel |
 | Over | **their** board revealed: their hulls, what sank, and every shot you spent on their water | `WIN` or `LOSE` and the winner by name for three seconds, then **your own** board beside theirs |
 | Waiting | `WAITING FOR` / their **name**, in the small font / `TO PLACE FLEET` | your own board, and `YOUR FLEET 5/5` |
@@ -351,7 +351,7 @@ browser ticks at ~60Hz and the device at ~50Hz.
 | `include/espnow.h` | device | board-to-board transport: discovery, seats from MACs, packets over the radio |
 | `tools/espnow_seat_test.cpp` | tooling | both boards reach the same seat answer without asking each other |
 | `src/game/netplay.h` | both | the match packet in C++: the seven protocol fields, peer ids, validation, and the `static_assert`s tying `ShotResult`/`ShipType` to `server/PROTOCOL.md`. No transport |
-| `src/game/game_config.h` | both | timing tunables (`STEP_MS`, `DOUBLE_MS`, `HOLD_MS`, `LEAVE_HOLD_MS`, `OVERLAY_MS`, `WAVE_MS`) and the name widths |
+| `src/game/game_config.h` | both | timing tunables (`STEP_MS`, `DOUBLE_MS`, `HOLD_MS`, `LEAVE_HOLD_MS`, `ROOM_LEAVE_HOLD_MS`, `OVERLAY_MS`, `WAVE_MS`) and the name widths |
 | `src/game/grid.h` `.cpp` | both | 10x10 grid geometry (51x51 px): ruled and dot styles, labels, marks, ship shapes, crosshair |
 | `src/game/sprite.h` `.cpp` | both | 1bpp sprite blit; owns the title-screen ship |
 | `src/game/ship_sprite.inc` | both | generated 48x48 ship bitmap &mdash; do not edit by hand |
@@ -443,7 +443,7 @@ flowchart TB
     START["<b>Start</b><br/>ONLINE or OFFLINE"]
     OFF["<b>Offline</b><br/>ESP-NOW, board to board<br/><i>waits for a hello</i>"]
     CONN["<b>Connecting</b><br/>join the lobby"]
-    ROOMS["<b>Rooms</b><br/>five numbered lobbies<br/><i>press to join, hold to leave</i>"]
+    ROOMS["<b>Rooms</b><br/>five numbered lobbies<br/><i>press to join, hold a second to leave</i>"]
     PAIR{"two in<br/>the lobby?"}
     PLACE["<b>Place</b><br/>lay out the fleet"]
     WAIT["<b>Waiting</b><br/>for their fleet"]
@@ -1348,8 +1348,8 @@ same source runs on a microcontroller.
 
 Space or Enter starts the game, takes a ship in hand, turns it, fires, and
 dismisses a result; pressing it twice quickly puts the ship in hand down, and
-holding it counts down out of the lobby. Arrow keys or WASD move the picker
-and the two cursors.
+holding it leaves -- a second on the rooms list, five counted-down seconds out
+of a match. Arrow keys or WASD move the picker and the two cursors.
 
 **On a phone the panels are the controls.** A swipe across either one is the
 direction it went, a tap is centre, two taps place a ship, and holding still
@@ -1383,19 +1383,23 @@ and are in `include/config.h` where that person is already looking.
 
 Underneath are three things and no more: **RESET**, which re-runs
 `Game::begin()` and gives the seat up, so the core is left exactly as a fresh
-power-on would leave it; the **name box**; and **CONTROLS**.
+power-on would leave it; **CHANGE NAME**; and **CONTROLS**.
 
-**The name box shadows out while a game is on.** A name is who the relay
-thinks is at the table, and changing it under a running match would leave the
-opponent looking at somebody who no longer exists. In the lobby it can be
-edited, and then a **SAVE** button appears beside it with a warning underneath
-saying what saving does: it stands you up from your lobby and starts the page
-again, so you come in as that player from the beginning. There is no halfway
-version of that -- the name travels with the join, the seat and the board.
+**CHANGE NAME opens the same modal that asked for the name in the first
+place**, with the name already in the field and **SAVE** under it instead of
+ENTER. One modal, not a second editor in the bar: two would be two places for
+a name to be checked, and only one of them would stay right. Escape closes it
+-- the first-run ask cannot be dismissed, because the name travels with the
+player to the other side and has to exist before the connection does.
 
-The name is asked for in a modal only the **first** time. After that the box
-under the screens is where it is changed; stopping a returning player at a
-dialog to confirm a name they already have is a door with nothing behind it.
+Saving a different name stands you up from your lobby and starts the page
+again, so you come in as that player from the beginning; the modal says so
+above the button. There is no halfway version of that -- the name travels with
+the join, the seat and the board. Saving the name you already have just closes.
+
+**The button shadows out while a game is on.** A name is who the relay thinks
+is at the table, and changing it under a running match would leave the
+opponent looking at somebody who no longer exists.
 
 **CONTROLS** opens the five-way switch as it sits under a thumb -- a circle in
 the middle, a triangle on each side -- over a table of what each gesture does:

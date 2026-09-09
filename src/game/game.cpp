@@ -148,6 +148,17 @@ bool Game::stepCursor(const Input &in, uint32_t nowMs, Coord &c, int loBound) {
   return true;
 }
 
+// Two holds, not one. Backing out of a lobby on the list is cheap and quick;
+// walking out of a game the other player is in the middle of is neither, and
+// says so by counting down first.
+static uint32_t leaveHoldMs(Page p) {
+  return p == Page::Rooms ? ROOM_LEAVE_HOLD_MS : LEAVE_HOLD_MS;
+}
+
+// The count is the warning, so it belongs only where there is something to
+// warn about. A second on the rooms list passes before it could be read.
+static bool countsDownToLeave(Page p) { return p != Page::Rooms; }
+
 void Game::tick(const Input &in, uint32_t nowMs) {
   // The centre button's level, so a press that leaves one page is never seen
   // again as a fresh press by the page it lands on -- the button is usually
@@ -156,7 +167,8 @@ void Game::tick(const Input &in, uint32_t nowMs) {
 
   // Held centre outranks whatever the page would have done with it: a press
   // on its way to leaving must not also be firing, turning or joining.
-  if (updateLeaveHold(in, nowMs) || (_leaveSince != 0 && nowMs - _leaveSince >= HOLD_MS)) {
+  if (updateLeaveHold(in, nowMs) ||
+      (_leaveSince != 0 && countsDownToLeave(_page) && nowMs - _leaveSince >= HOLD_MS)) {
     render(nowMs);
     return;
   }
@@ -331,7 +343,7 @@ void Game::render(uint32_t nowMs) {
 
   // The countdown covers whatever page is underneath it. It is not a page of
   // its own: it can be let go of, and then the game is exactly where it was.
-  if (_leaveSince != 0 && nowMs - _leaveSince >= HOLD_MS) {
+  if (_leaveSince != 0 && countsDownToLeave(_page) && nowMs - _leaveSince >= HOLD_MS) {
     const uint32_t held = nowMs - _leaveSince;
     const uint32_t left = held >= LEAVE_HOLD_MS ? 0 : LEAVE_HOLD_MS - held;
     renderLeaving(nowMs, static_cast<int>(left / 1000) + 1);
@@ -440,6 +452,7 @@ static bool inAGame(Page p) {
          p == Page::Miss || p == Page::Sunk || p == Page::Over;
 }
 
+
 // Centre held, anywhere in a game: go back to the lobby list.
 //
 // Counted down rather than done at once, and counted down on the screen: five
@@ -455,7 +468,7 @@ bool Game::updateLeaveHold(const Input &in, uint32_t nowMs) {
     _leaveSince = nowMs;
     return false;
   }
-  if (nowMs - _leaveSince < LEAVE_HOLD_MS) {
+  if (nowMs - _leaveSince < leaveHoldMs(_page)) {
     // Once the count is showing, the page underneath stops taking input: a
     // hold that is on its way to leaving must not also be firing shots.
     const bool counting = nowMs - _leaveSince >= HOLD_MS;

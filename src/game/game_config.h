@@ -29,11 +29,17 @@ constexpr uint32_t DOUBLE_MS = 500;
 // the double press, so putting a ship down never starts one.
 constexpr uint32_t HOLD_MS = 800;
 
-// And how long it has to be held in total to actually leave. Five seconds,
-// counted down on the panel a second at a time, because leaving a match is
-// not something to do by resting a thumb on a button: the count is both the
-// warning and the way out of it -- let go and nothing happened.
+// And how long it has to be held in total to actually leave a game. Five
+// seconds, counted down on the panel a second at a time, because leaving a
+// match is not something to do by resting a thumb on a button: the count is
+// both the warning and the way out of it -- let go and nothing happened.
 constexpr uint32_t LEAVE_HOLD_MS = 5000;
+
+// Stepping back out of a lobby on the rooms list costs a second and shows no
+// count. Nothing is under way there yet -- no ships down, no opponent waiting
+// on a turn -- so there is nothing to warn about, and a five-second hold to
+// undo a lobby you picked by mistake is five seconds of standing still.
+constexpr uint32_t ROOM_LEAVE_HOLD_MS = 1000;
 
 // How long the verdict has the bottom panel to itself before it gives way to
 // the two boards. Three seconds is long enough to read WIN or LOSE and the

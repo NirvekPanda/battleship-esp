@@ -255,38 +255,23 @@ el("btn-reset", HTMLButtonElement).addEventListener("click", resetGame);
 // board -- so the honest implementation goes back to the beginning and comes
 // in again as that player.
 function wireNameBox() {
-  const box = el("btn-name", HTMLInputElement);
-  const save = el("btn-save", HTMLButtonElement);
-  const warn = el("nameWarn", HTMLParagraphElement);
+  const button = el("btn-name", HTMLButtonElement);
 
-  // Whether the player has typed in it. Tracked rather than inferred from a
-  // comparison with the current name, so filling the box in from the name we
-  // already know does not look like an edit -- which is what left it empty.
-  let dirty = false;
+  // Shadowed out once a game is on: the name travels with the join, the seat
+  // and the board, so changing it mid-match would be changing who the relay
+  // thinks is playing.
+  const refresh = () => { button.disabled = peerToken !== ""; };
 
-  const refresh = () => {
-    const playing = peerToken !== "";
-    box.disabled = playing;
-    if (!dirty && document.activeElement !== box) box.value = playerName;
-    const show = dirty && !playing && cleanName(box.value).trim() !== playerName;
-    save.hidden = !show;
-    warn.hidden = !show;
-  };
+  button.addEventListener("click", async () => {
+    if (button.disabled) return;
+    const chosen = await nameModal({
+      submit: "SAVE",
+      note: "Changing your name restarts the game.",
+      cancelable: true,
+    });
+    if (chosen === null || chosen === playerName) return;
 
-  box.addEventListener("input", () => {
-    const fixed = cleanName(box.value);
-    if (fixed !== box.value) {
-      const at = Math.min(box.selectionStart ?? fixed.length, fixed.length);
-      box.value = fixed;
-      box.setSelectionRange(at, at);
-    }
-    dirty = true;
-    refresh();
-  });
-
-  save.addEventListener("click", async () => {
-    const name = cleanName(box.value).trim() || "player";
-    store.set(localStorage, "playerName", name);
+    store.set(localStorage, "playerName", chosen);
     // Stand up from whatever lobby this player is sitting in first, so the
     // row does not keep showing a name nobody answers to, then start again.
     try {
@@ -435,16 +420,50 @@ function cleanName(raw: string): string {
   return out;
 }
 
-function askName(): Promise<void> {
+// The name modal, for both the player who has no name yet and the one
+// changing the name they have. One function, because two would be two places
+// for the field to be validated and only one of them would stay right.
+//
+// Returns the name, or null when it was dismissed -- which only the rename
+// can do. The first-run ask has to be answered: the name travels with the
+// player to the other side, so it has to exist before the connection does.
+function nameModal(opts: {
+  submit: string;
+  note?: string;
+  cancelable: boolean;
+}): Promise<string | null> {
   return new Promise((resolve) => {
     const modal = el("nameModal", HTMLDivElement);
     const form = el("nameForm", HTMLFormElement);
     const input = el("nameInput", HTMLInputElement);
     const hint = el("nameHint", HTMLParagraphElement);
+    const submit = el("nameSubmit", HTMLButtonElement);
+
+    // Listeners are added per opening, so they are removed per closing too --
+    // otherwise the second rename submits twice and the third three times.
+    const ac = new AbortController();
+    const { signal } = ac;
+
+    submit.textContent = opts.submit;
     input.maxLength = NAME_MAX;
     input.value = cleanName(playerName);
+    hint.textContent = opts.note ?? "";
+    hint.classList.remove("bad");
     modal.hidden = false;
     input.focus();
+    input.select();
+
+    const close = (name: string | null) => {
+      modal.hidden = true;
+      ac.abort();
+      // Focus has to leave the field, not just the screen. Keys typed while
+      // an input has focus are letters, not moves -- that is what stops WASD
+      // being unusable in the name box -- so a hidden box that kept focus
+      // swallowed every press of the game that followed it.
+      input.blur();
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      resolve(name);
+    };
 
     // Corrected as it is typed rather than refused on submit: a paste that
     // carries a newline is fixed in front of the player, who then sees what
@@ -462,25 +481,28 @@ function askName(): Promise<void> {
       hint.classList.remove("bad");
       // Only near the limit, and only the number: a count that is always on
       // screen is noise, and the reason for the limit is not the player's
-      // problem.
+      // problem. The note, when there is one, is what it says otherwise.
       const left = NAME_MAX - [...fixed].length;
-      hint.textContent = left <= 4 ? `${left} left` : "";
-    });
+      hint.textContent = left <= 4 ? `${left} left` : (opts.note ?? "");
+    }, { signal });
+
+    if (opts.cancelable) {
+      addEventListener("keydown", (e) => {
+        if (e.key === "Escape") close(null);
+      }, { signal });
+    }
 
     form.addEventListener("submit", (e) => {
       e.preventDefault();
-      playerName = cleanName(input.value).trim() || "player";
-      store.set(localStorage, "playerName", playerName);
-      modal.hidden = true;
-      // Focus has to leave the field, not just the screen. Keys typed while
-      // an input has focus are letters, not moves -- that is what stops WASD
-      // being unusable in the name box -- so a hidden box that kept focus
-      // swallowed every press of the game that followed it.
-      input.blur();
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-      resolve();
-    });
+      close(cleanName(input.value).trim() || "player");
+    }, { signal });
   });
+}
+
+async function askName(): Promise<void> {
+  const chosen = await nameModal({ submit: "ENTER", cancelable: false });
+  playerName = chosen ?? "player";
+  store.set(localStorage, "playerName", playerName);
 }
 
 // ---- the five rooms -----------------------------------------------------
@@ -687,12 +709,11 @@ async function connect() {
 sim._sim_begin();
 selectPage(PAGE.start);
 
-wireNameBox();       // the box exists from the start; the name arrives next
+wireNameBox();       // the button exists from the start; the name arrives next
 
-// Asked once, the first time. After that the name is known and the box under
-// the screens is where it is changed -- stopping a returning player at a
-// modal to confirm the name they already have is a door with nothing behind
-// it, and it made renaming yourself a two-step affair.
+// Asked once, the first time. After that the name is known and CHANGE NAME is
+// where it is changed -- stopping a returning player at a modal to confirm
+// the name they already have is a door with nothing behind it.
 if (playerName === "") {
   await askName();
 } else {

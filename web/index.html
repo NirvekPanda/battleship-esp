@@ -48,18 +48,9 @@
   .bar { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap;
          justify-content: center; width: min(512px, 92vw); }
   .bar > button { flex: 0 0 auto; }
-  .namebox { display: flex; gap: 6px; flex: 0 1 180px; min-width: 0; max-width: 100%; }
-  .namebox input {
-    flex: 1 1 auto; min-width: 0; box-sizing: border-box;
-    font: inherit; font-size: 12px; letter-spacing: .06em; text-align: center;
-    background: #0a0e14; color: #c3ccd9; border: 1px solid #333d4d;
-    border-radius: 5px; padding: 7px 10px;
-  }
-  .namebox input:focus { outline: none; border-color: #33ccff; }
   /* Shadowed out once a game is on: a name is a thing you are, and changing
      it mid-match would be changing who the relay thinks is playing. */
-  .namebox input:disabled { opacity: .45; cursor: not-allowed; }
-  #btn-save { border-color: #33ccff; color: #33ccff; }
+  #btn-name:disabled { opacity: .45; cursor: not-allowed; }
   .warn { margin: 0; font-size: 11px; color: #e2b8c6; text-align: center;
           max-width: min(512px, 92vw); }
 
@@ -147,7 +138,7 @@
       <!-- Empty until there is something to say: it carries the complaint
            when a name will not do, and nothing otherwise. -->
       <p class="hintline" id="nameHint"></p>
-      <button type="submit">ENTER</button>
+      <button type="submit" id="nameSubmit">ENTER</button>
     </form>
   </div>
 
@@ -167,14 +158,9 @@
        again, who they are, and how to play. -->
   <div class="bar">
     <button id="btn-reset" title="Start over">RESET</button>
-    <div class="namebox">
-      <input id="btn-name" maxlength="16" autocomplete="off" spellcheck="false"
-             aria-label="Your name" placeholder="name">
-      <button id="btn-save" hidden>SAVE</button>
-    </div>
+    <button id="btn-name" aria-haspopup="dialog">CHANGE NAME</button>
     <button id="btn-controls" aria-haspopup="dialog">CONTROLS</button>
   </div>
-  <p class="warn" id="nameWarn" hidden>Changing your name restarts the game.</p>
 
   <!-- The five-way switch the boards have, drawn as it sits under a thumb. -->
   <div id="controlsModal" class="modal" hidden>
