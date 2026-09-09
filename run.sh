@@ -56,7 +56,11 @@ DASH_HOST="${DASH_HOST:-dashship.nirvek.xyz}"
 reexec_as_root() {
   [ "$(id -u)" -eq 0 ] && return 0
   command -v sudo >/dev/null || die "not root and no sudo; log in as root and re-run"
-  say "becoming root to $1"
+  # The first argument says what for; the rest are the script's own options and
+  # are the only thing that may be handed back to it. Forwarding the reason as
+  # well is how root's copy came to be run with "install the service" as $1.
+  local why="$1"; shift
+  say "becoming root to $why"
   local env_args
   env_args="PORT=$PORT DASH_PORT=$DASH_PORT GRAFANA_PORT=$GRAFANA_PORT \
 SERVICE=$SERVICE GAME_HOST=$GAME_HOST DASH_HOST=$DASH_HOST \
