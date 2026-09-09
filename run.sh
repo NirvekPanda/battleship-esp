@@ -50,6 +50,28 @@ SERVER_IP="${SERVER_IP:-192.168.86.104}"
 GAME_HOST="${GAME_HOST:-battleship.nirvek.xyz}"
 DASH_HOST="${DASH_HOST:-dashship.nirvek.xyz}"
 
+# Become root and carry on, using the password above -- so --install and
+# --nginx can be run as the battleship user with no sudo typed in front. The
+# settings are passed explicitly because sudo resets the environment.
+reexec_as_root() {
+  [ "$(id -u)" -eq 0 ] && return 0
+  command -v sudo >/dev/null || die "not root and no sudo; log in as root and re-run"
+  say "becoming root to $1"
+  local env_args
+  env_args="PORT=$PORT DASH_PORT=$DASH_PORT GRAFANA_PORT=$GRAFANA_PORT \
+SERVICE=$SERVICE GAME_HOST=$GAME_HOST DASH_HOST=$DASH_HOST \
+RELAY_HOST=$RELAY_HOST SERVER_IP=$SERVER_IP TOKEN_FILE=$TOKEN_FILE \
+SUDO_USER_NAME=$SUDO_USER_NAME"
+  if sudo -n true 2>/dev/null; then
+    # shellcheck disable=SC2086
+    exec sudo env $env_args "$0" "$@"
+  fi
+  printf '%s\n' "$SUDO_PASS" | sudo -S -p '' true 2>/dev/null \
+    || die "sudo refused the stored password for $(id -un); set SUDO_PASS, or run as root"
+  # shellcheck disable=SC2086
+  exec sudo -S -p '' env $env_args "$0" "$@" < <(printf '%s\n' "$SUDO_PASS")
+}
+
 # The token, in one place: whatever was passed in, else the saved one, else a
 # new one saved for next time. Readable only by the account that runs this.
 ensure_token() {
@@ -295,7 +317,7 @@ serve() {
 # which is what "make sure it is up to date before launching" means when the
 # launching is done by systemd at three in the morning.
 install_service() {
-  [ "$(id -u)" -eq 0 ] || die "run --install as root (sudo ./run.sh --install)"
+  reexec_as_root "install the service" --install
   # The account the relay runs as. SUDO_USER is who invoked sudo, which is
   # the right guess when that is a person and the wrong one when it is a
   # script; the configured name wins.
@@ -342,7 +364,7 @@ UNIT
 }
 
 uninstall_service() {
-  [ "$(id -u)" -eq 0 ] || die "run --uninstall as root"
+  reexec_as_root "remove the service" --uninstall
   systemctl disable --now "$SERVICE" 2>/dev/null || true
   rm -f "/etc/systemd/system/$SERVICE.service"
   systemctl daemon-reload
@@ -354,7 +376,7 @@ uninstall_service() {
 # the tunnel and proxies to the two ports. Same-origin inside, so the CORS
 # block only matters for a page served from one name calling the other.
 install_nginx() {
-  [ "$(id -u)" -eq 0 ] || die "run --nginx as root"
+  reexec_as_root "install the nginx site" --nginx
   if ! command -v nginx >/dev/null; then
     say "installing nginx"
     apt_get update -qq && apt_get install -y --no-install-recommends nginx \

@@ -53,6 +53,14 @@ for target in "127.0.0.1:$PORT" "127.0.0.1:$DASH_PORT" "$SERVER_IP:$PORT" "$SERV
   echo "  http://$target/           -> $code"
 done
 echo "  (200 here and 502 through nginx means nginx is proxying to the wrong address)"
+if ! curl -fsS -o /dev/null --max-time 5 "http://127.0.0.1:$PORT/" 2>/dev/null &&
+   ! curl -fsS -o /dev/null --max-time 5 "http://$SERVER_IP:$PORT/" 2>/dev/null; then
+  echo
+  echo "  >>> THE RELAY IS NOT RUNNING. Nothing is listening on :$PORT, so every"
+  echo "  >>> proxy in front of it -- nginx, the tunnel -- can only answer 502."
+  echo "  >>> Start it:            ./run.sh"
+  echo "  >>> Start it at boot:    sudo ./run.sh --install"
+fi
 
 h "nginx config"
 if have nginx; then
@@ -61,7 +69,7 @@ if have nginx; then
   echo "--- enabled sites ---"
   ls -l /etc/nginx/sites-enabled/ 2>/dev/null
   echo "--- what this site proxies to (the 502 answer is usually here) ---"
-  grep -rnE 'proxy_pass|server_name|listen' /etc/nginx/sites-enabled/ 2>/dev/null | scrub
+  grep -RnE 'proxy_pass|server_name|listen' /etc/nginx/sites-enabled/ 2>/dev/null | scrub
 else
   echo "nginx is NOT installed on this machine"
 fi
@@ -84,7 +92,13 @@ h "cloudflare tunnel"
 if have cloudflared; then
   cloudflared --version
   if have systemctl; then systemctl status cloudflared --no-pager -l 2>&1 | head -15 | scrub; fi
-  echo "--- ingress rules (the service: line must point at nginx, normally http://localhost:80) ---"
+  echo "--- ingress rules ---"
+  echo "  A tunnel whose rules live in the Cloudflare dashboard shows nothing"
+  echo "  for these hostnames here, while the log above still names an"
+  echo "  ingressRule and an originService -- that is the real routing. If it"
+  echo "  points straight at the relay's port, nginx is not in the path at all"
+  echo "  and does not need to be: the relay serves the page and /v1 together,"
+  echo "  so it is same-origin either way."
   for f in /etc/cloudflared/config.yml /etc/cloudflared/config.yaml "$HOME/.cloudflared/config.yml"; do
     [ -f "$f" ] && { echo "--- $f ---"; scrub < "$f"; }
   done
@@ -99,7 +113,7 @@ fi
 h "firewall"
 have ufw && ufw status verbose 2>/dev/null | head -15
 have iptables && iptables -S 2>/dev/null | grep -vE '^-P|^-N' | head -15
-echo "(nothing printed above means no local firewall rules to blame)"
+echo "(only DOCKER-* rules above means no local firewall rule is blocking anything)"
 
 h "docker / grafana"
 if have docker; then docker ps --format '  {{.Names}}  {{.Status}}  {{.Ports}}' 2>/dev/null; else echo "no docker"; fi

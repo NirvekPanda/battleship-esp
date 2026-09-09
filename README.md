@@ -953,6 +953,20 @@ A Go that this script did not install is not its to replace: one from apt,
 brew or a version manager is reported and left where it is, and only refused
 outright if it is older than the language the relay needs.
 
+### The tunnel can skip nginx entirely
+
+Cloudflare tunnel rules managed in the dashboard, rather than in
+`/etc/cloudflared/config.yml`, do not appear in that file at all -- the
+`originService` in cloudflared's log is the truth. Pointing them straight at
+`192.168.86.104:8090` and `:8091` works and needs no nginx: the relay serves
+the game page, the dashboard and `/v1` from the same ports, so the page and
+the API share an origin and CORS never enters into it. nginx is only worth
+adding to terminate the names locally or to put something in front of the API.
+
+Either way the relay has to be running. A tunnel and an nginx in front of a
+relay that is not there both report the same thing: connection refused,
+answered outward as 502.
+
 ### When the front door 502s
 
 A 502 is nginx saying it could not reach the relay -- nginx itself is fine.
