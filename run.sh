@@ -147,7 +147,14 @@ version_at_least() {
   [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
 }
 
-go_version() { go version 2>/dev/null | awk '{print $3}' | sed 's/^go//'; }
+# Empty when go is not installed -- and it has to SUCCEED while saying so.
+# `set -o pipefail` makes a pipeline that starts with a missing command return
+# 127, which under `set -e` killed the script mid-assignment with no message
+# at all: "git pull" and then silence. Ask before piping.
+go_version() {
+  command -v go >/dev/null 2>&1 || return 0
+  go version 2>/dev/null | awk '{print $3}' | sed 's/^go//'
+}
 
 install_go() {
   local want="$1"
@@ -176,7 +183,7 @@ install_go() {
 # to test the string rather than the exit status.
 latest_go() {
   local v
-  v="$(curl -fsSL https://go.dev/VERSION?m=text 2>/dev/null | head -1 | sed 's/^go//')"
+  v="$(curl -fsSL https://go.dev/VERSION?m=text 2>/dev/null | head -1 | sed 's/^go//' || true)"
   [ -n "$v" ] || v="$MIN_GO"
   printf '%s\n' "$v"
 }
@@ -239,7 +246,7 @@ ensure_emcc() {
         || warn "emsdk update failed -- keeping the version already installed"
       use_emsdk || true
     fi
-    say "emcc $(emcc -v 2>&1 | head -1 | awk '{print $NF}')"
+    say "emcc $(emcc -v 2>&1 | head -1 | awk '{print $NF}' || true)"
     return
   fi
 
@@ -401,17 +408,24 @@ install_nginx() {
 
   # A 502 means nginx could not reach the relay, which is worth finding out
   # here rather than from a browser. nginx is fine; the thing behind it is not.
-  local u
+  # -s not -sS: curl's own "Failed to connect" is noise next to the advice
+  # below, and printing it twice for two ports buries the one useful line.
+  local u down=0
   for u in "$RELAY_HOST:$PORT" "$RELAY_HOST:$DASH_PORT"; do
-    if curl -fsS -o /dev/null --max-time 5 "http://$u/"; then
+    if curl -fs -o /dev/null --max-time 5 "http://$u/" 2>/dev/null; then
       say "upstream $u answers"
     else
-      warn "upstream $u does NOT answer -- nginx will return 502 for it."
-      warn "  is the relay running?   systemctl status $SERVICE"
-      warn "  is it on another box?   sudo RELAY_HOST=$SERVER_IP ./run.sh --nginx"
-      warn "  is it bound to loopback only? it must listen on 0.0.0.0 to be reached from another container"
+      warn "upstream $u does NOT answer -- nginx will return 502 for it"
+      down=1
     fi
   done
+  if [ "$down" -eq 1 ]; then
+    warn ""
+    warn "nginx is fine; the relay behind it is not running. Start it:"
+    warn "    ./run.sh --install     (and it comes back after a reboot)"
+    warn "If the relay lives on another machine, point nginx at it instead:"
+    warn "    RELAY_HOST=$SERVER_IP ./run.sh --nginx"
+  fi
 }
 
 case "${1:-serve}" in
