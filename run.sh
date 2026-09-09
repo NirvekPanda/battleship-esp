@@ -302,7 +302,12 @@ build() {
   fi
 
   say "building the relay"
-  ( cd server && go build -o relay . )
+  # CGO_ENABLED=0: the relay imports nothing outside the standard library and
+  # no "C", so cgo buys it nothing -- but Go turns cgo on by default, and a
+  # container image without linux-libc-dev then fails the build on a missing
+  # <linux/errno.h> that has no bearing on this program. Off, it builds
+  # anywhere and links statically, which is what a container wants.
+  ( cd server && CGO_ENABLED=0 go build -o relay . )
 }
 
 # ---- serve ----------------------------------------------------------------
