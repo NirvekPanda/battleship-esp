@@ -305,7 +305,38 @@ func TestPlacementPackingRoundTrip(t *testing.T) {
 
 func TestFleetDescribe(t *testing.T) {
 	p := Packet{T: TFleet, A: 2, B: uint8((3 + 4*BoardSize) * 2)}
-	if got, want := p.Describe(), "fleet  CRUISER at E3 across"; got != want {
+	if got, want := p.Describe(), "fleet  CRUISER at E3 across, ship #3 of 5, 3 long"; got != want {
+		t.Fatalf("Describe() = %q, want %q", got, want)
+	}
+}
+
+// Every ship, so the number and the length cannot drift apart from the name
+// they are printed beside: ship #N is the Nth name and the Nth length.
+func TestFleetDescribeNumbersAndLengths(t *testing.T) {
+	want := []string{
+		"fleet  CARRIER at A0 across, ship #1 of 5, 5 long",
+		"fleet  BATTLESHIP at A0 across, ship #2 of 5, 4 long",
+		"fleet  CRUISER at A0 across, ship #3 of 5, 3 long",
+		"fleet  SUBMARINE at A0 across, ship #4 of 5, 3 long",
+		"fleet  DESTROYER at A0 across, ship #5 of 5, 2 long",
+	}
+	for i := range shipNames {
+		p := Packet{T: TFleet, A: uint8(i), B: 0}
+		if got := p.Describe(); got != want[i] {
+			t.Errorf("ship %d: Describe() = %q, want %q", i, got, want[i])
+		}
+	}
+}
+
+// A vertical placement says so, and the server handing a player their own
+// fleet back describes it exactly as the original packet did.
+func TestFleetDescribeVerticalAndMyFleet(t *testing.T) {
+	down := Packet{T: TFleet, A: 0, B: uint8((3+4*BoardSize)*2 + 1)}
+	if got, want := down.Describe(), "fleet  CARRIER at E3 down, ship #1 of 5, 5 long"; got != want {
+		t.Fatalf("Describe() = %q, want %q", got, want)
+	}
+	mine := Packet{T: TMyFleet, A: 0, B: uint8((3+4*BoardSize)*2 + 1)}
+	if got, want := mine.Describe(), "myfleet CARRIER at E3 down, ship #1 of 5, 5 long"; got != want {
 		t.Fatalf("Describe() = %q, want %q", got, want)
 	}
 }

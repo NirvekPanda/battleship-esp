@@ -309,6 +309,27 @@ var pageNames = [...]string{
 var resultNames = [...]string{"MISS", "HIT", "SUNK"}
 var shipNames = [...]string{"CARRIER", "BATTLESHIP", "CRUISER", "SUBMARINE", "DESTROYER"}
 
+// placement renders a fleet packet's payload: which ship it is by name and by
+// number, how long it is, and which way it faces. The name comes first because
+// Describe() splits on the first space to slot the cell in after it.
+//
+// Ships are 0..4 in the packet and #1..#5 here: a player counting their ships
+// starts at one, and this line is read by people, not by the core.
+func placement(idx uint8, vertical bool) string {
+	name := "ship?"
+	length := 0
+	if int(idx) < len(shipNames) {
+		name = shipNames[idx]
+		length = shipLens[idx]
+	}
+	facing := "across"
+	if vertical {
+		facing = "down"
+	}
+	return fmt.Sprintf("%s %s, ship #%d of %d, %d long",
+		name, facing, idx+1, len(shipNames), length)
+}
+
 // Describe renders a packet as one line of English for the terminal. The
 // relay is often the only thing watching a match between two headless
 // boards, so what it prints is the whole picture of the game.
@@ -323,15 +344,7 @@ func (p Packet) Parts() (kind, cell, detail string) {
 		return kind, CellName(p.A, p.B), ""
 	case TFleet:
 		col, row, vertical := UnpackPlacement(p.B)
-		name := "ship?"
-		if int(p.A) < len(shipNames) {
-			name = shipNames[p.A]
-		}
-		facing := "across"
-		if vertical {
-			facing = "down"
-		}
-		return kind, CellName(uint8(col), uint8(row)), name + " " + facing
+		return kind, CellName(uint8(col), uint8(row)), placement(p.A, vertical)
 	case TResult:
 		out := ""
 		if int(p.A) < len(resultNames) {
@@ -357,15 +370,9 @@ func (p Packet) Parts() (kind, cell, detail string) {
 		return kind, "", "go to " + name
 	case TMyFleet:
 		col, row, vertical := UnpackPlacement(p.B)
-		name := "ship?"
-		if int(p.A) < len(shipNames) {
-			name = shipNames[p.A]
-		}
-		facing := "across"
-		if vertical {
-			facing = "down"
-		}
-		return kind, CellName(uint8(col), uint8(row)), "your " + name + " " + facing
+		// The same shape as a fleet line, so the two cannot describe one
+		// placement differently; the kind column already says whose it is.
+		return kind, CellName(uint8(col), uint8(row)), placement(p.A, vertical)
 	case TMark:
 		out := ""
 		if int(p.B&3) < len(resultNames) {
