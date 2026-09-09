@@ -1,0 +1,347 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>battleship relay &mdash; dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230a0e14'/%3E%3Cpath d='M2 10h12l-2 3H4z' fill='%2333ccff'/%3E%3Crect x='7' y='3' width='2' height='6' fill='%2333ccff'/%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg:#0a0e14; --panel:#121821; --line:#26303d; --ink:#c3ccd9;
+    --dim:#6b7789; --on:#33ccff; --warn:#e2b8c6; --ok:#7fd88f;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  header { padding:10px 16px; border-bottom:1px solid var(--line);
+           display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:14px; letter-spacing:.08em; }
+  header .where { color:var(--dim); }
+  #conn { margin-left:auto; }
+  /* The panels, and the bars that size them.
+     Columns: log | splitter | right-hand stack.
+     Rows in that stack: players | splitter | controls.
+     Columns inside players: main lobby | splitter | the watched lobby.
+     Every size is a CSS variable, so a drag is one custom-property write
+     rather than a relayout written by hand, and every one is remembered. */
+  .grid { display:grid; gap:0; padding:12px; height:calc(100vh - 47px);
+          grid-template-columns:minmax(0, var(--col, 1fr)) var(--gutter) minmax(0, 1fr);
+          grid-template-rows:minmax(0, 1fr); }
+  /* The default is not half and half: the controls are a fixed list of
+     buttons and the players panel is five rows, so an even split hid the last
+     control below the fold on a laptop. Players takes what it needs and the
+     controls take the rest, until somebody drags it. */
+  .stack { display:grid; min-width:0; min-height:0;
+           grid-template-rows:minmax(0, var(--row, 330px)) var(--gutter) minmax(0, 1fr); }
+  .split { display:grid; min-height:0; min-width:0;
+           grid-template-columns:minmax(0, var(--half, 1fr)) var(--gutter) minmax(0, 1fr); }
+  /* A laptop screen is shorter than the two panels want. The players list is
+     the one that can spare the room -- five rows and two seats -- so it gives
+     it up rather than leaving the last control below the fold. */
+  @media (max-height: 900px) { .stack { --row:280px; } }
+  /* And on a short screen the controls tighten up rather than scroll: a
+     button you have to find by scrolling a 400px panel is a button that gets
+     missed. The values are the same design, one notch closer together. */
+  @media (max-height: 780px) {
+    .stack { --row:236px; }
+    .group { padding-bottom:9px; margin-bottom:9px; }
+    .group h3 { margin-bottom:6px; }
+    .pages { gap:6px; }
+    .pages button { padding:6px 10px; }
+    .note { margin-top:7px; }
+  }
+  @media (max-height: 680px) { .stack { --row:190px; } }
+  :root { --gutter:14px; }
+
+  /* A splitter is a control: a real element, focusable, with a hit area wider
+     than the line it draws -- a two-pixel target is not one -- and arrow keys
+     that move it, so it is usable without a pointer at all. */
+  .sep { position:relative; background:none; border:0; padding:0;
+         align-self:stretch; justify-self:stretch; }
+  .sep[aria-orientation="vertical"]   { cursor:col-resize; }
+  .sep[aria-orientation="horizontal"] { cursor:row-resize; }
+  .sep::after { content:""; position:absolute; background:var(--line);
+                border-radius:2px; transition:background .12s ease; }
+  .sep[aria-orientation="vertical"]::after {
+    top:2px; bottom:2px; left:calc(50% - 1px); width:2px; }
+  .sep[aria-orientation="horizontal"]::after {
+    left:2px; right:2px; top:calc(50% - 1px); height:2px; }
+  .sep:hover::after, .sep.dragging::after { background:var(--on); }
+  /* Focus is drawn on the line rather than as a ring around a 14px strip,
+     which would be a box floating in a gap. */
+  .sep:focus { outline:none; }
+  .sep:focus-visible::after { background:var(--on); box-shadow:0 0 0 2px #33ccff44; }
+  body.resizing-h, body.resizing-h * { cursor:col-resize !important; user-select:none; }
+  body.resizing-v, body.resizing-v * { cursor:row-resize !important; user-select:none; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:6px;
+            display:flex; flex-direction:column; min-height:0; min-width:0; }
+  h2 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.12em;
+       color:var(--dim); border-bottom:1px solid var(--line); text-transform:uppercase; }
+  .body { padding:10px 12px; overflow:auto; min-height:0; flex:1;
+          scrollbar-width:thin; }
+  /* The log is the one panel that must not reflow as it grows. */
+  /* No padding at the TOP of the scrolling box. A sticky header sticks to the
+     top of the scrollport, and the padding is inside it -- so rows scroll up
+     into that strip and stay visible above the header, which reads as a gap
+     over a header that is supposed to be covering them. */
+  #log { font-size:12px; padding:0 12px 10px; }
+
+  /* Fixed layout is what makes the <col> widths authoritative: with auto
+     layout the browser reflows to content and a dragged width is ignored.
+     width:max-content lets the table grow PAST the panel when columns are
+     widened, so the container scrolls sideways instead of stealing the space
+     back off the last column -- which is what a spreadsheet does. */
+  #logTable { table-layout:fixed; width:max-content; min-width:100%;
+              border-collapse:separate; border-spacing:0; }
+  #logTable td { padding:1px 8px 1px 0; vertical-align:top;
+                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* One colour per column, on the header as well as the cells, so a column is
+     identifiable without reading its header every time. */
+  #logTable .when   { color:var(--dim); }
+  /* The lobby a line belongs to: "main" for the one everyone arrives in,
+     "lobby N" for one of the five games. Dimmer than the rest, because it is
+     what you scan down rather than read. */
+  #logTable .scope  { color:var(--dim, #7f8fa6); }
+  #logTable .page   { color:var(--warn); }
+  #logTable .player { color:var(--on); }
+  #logTable .to     { color:#7f8fa6; }
+  #logTable .kind   { color:var(--ok); }
+  #logTable .cell   { color:#e8d18a; }
+  #logTable .detail { color:var(--ink); }
+  #logTable .seq    { color:var(--dim); }
+
+  /* Chevrons: down collapses a column, up opens it again. A collapsed column
+     keeps its header in place rather than vanishing into a bar of its own --
+     the control stays where the column is, so bringing it back needs no
+     second place to look. */
+  .chev { cursor:pointer; color:var(--dim); padding:0 2px; font-size:12px;
+          background:none; border:0; font-family:inherit; line-height:1; }
+  .chev:hover { color:var(--on); }
+  /* Collapsed: only the label and its chevron, dimmed, sitting hard against
+     the column before it. */
+  #logTable th.collapsed { opacity:.55; }
+  #logTable th.collapsed .label { font-size:10px; }
+  /* A line with no columns -- startup, joins, errors -- spans the lot. */
+  #logTable td.plain  { color:var(--ink); white-space:pre-wrap; }
+
+  /* Header stays put while the log scrolls under it, so the column you are
+     dragging is always reachable. */
+  #logTable thead th {
+    position:sticky; top:0; z-index:1;
+    background:var(--panel);
+    text-align:left; font-weight:500; font-size:13px; letter-spacing:.06em;
+    text-transform:uppercase; padding:6px 8px 5px 0;
+    user-select:none; white-space:nowrap;
+    /* A border on a sticky header does not travel with it under
+       border-collapse; an inset shadow is painted with the cell and does. */
+    box-shadow:inset 0 -1px 0 var(--line);
+  }
+  /* The grab area straddles the boundary, so the pointer does not have to
+     find a one-pixel line. */
+  .grip { position:absolute; top:0; right:-4px; width:9px; height:100%;
+          cursor:col-resize; }
+  .grip:hover, .grip.dragging { background:var(--on); opacity:.5; }
+  /* While a drag is in progress the cursor must not flicker as it crosses
+     other elements, and text must not select under it. */
+  body.resizing, body.resizing * { cursor:col-resize !important; user-select:none; }
+  table { width:100%; border-collapse:collapse; }
+  td { padding:4px 0; vertical-align:top; }
+  td.k { color:var(--dim); width:9em; }
+  .seat { display:flex; gap:8px; align-items:baseline; padding:4px 0;
+          border-bottom:1px solid var(--line); }
+  .seat .id { color:var(--on); width:2em; }
+  .seat .name { flex:1; }
+  .seat .state { color:var(--dim); font-size:11px; }
+  .empty { color:var(--dim); font-style:italic; }
+  button { font:inherit; font-size:12px; letter-spacing:.06em; cursor:pointer;
+           background:#1c2230; color:var(--ink); border:1px solid #333d4d;
+           border-radius:5px; padding:8px 12px; }
+  button:hover:not(:disabled) { border-color:#4a5668; }
+  button:disabled { opacity:.35; cursor:not-allowed; }
+  /* Buttons in pairs, and they stay in pairs down to a narrow panel because
+     auto-fit would drop them to one column and double the height of the
+     group -- which is what pushes the last one out of sight. */
+  .pages { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .pages button { min-width:0; overflow:hidden; text-overflow:ellipsis;
+                  white-space:nowrap; }
+  .pages.three { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .wide { width:100%; margin-top:8px; }
+  /* A labelled group, divided from the next by a rule rather than by
+     guesswork about spacing. */
+  .group { padding-bottom:12px; margin-bottom:12px;
+           border-bottom:1px solid var(--line); }
+  .group.last { padding-bottom:0; margin-bottom:0; border-bottom:0; }
+  .group h3 { margin:0 0 8px; font-size:11px; letter-spacing:.1em;
+              text-transform:uppercase; color:var(--dim); font-weight:500; }
+  /* Which lobby the page buttons act on, in the panel header where it cannot
+     be missed: they used to go to every table at once. */
+  .on-lobby { color:var(--on); letter-spacing:0; text-transform:none; }
+  .note { color:var(--dim); font-size:11px; margin-top:10px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%;
+         background:var(--dim); margin-right:6px; vertical-align:middle; }
+  .dot.up { background:var(--ok); }
+  .dot.down { background:var(--warn); }
+  #csv { width:100%; margin-top:10px; }
+
+
+  /* The players panel is two columns: the main lobby, and the one game lobby
+     being watched. A rule between them rather than a gap, so the two halves
+     read as one panel divided instead of two panels crammed together. */
+  .half { min-width:0; min-height:0; overflow:auto; }
+  .half.right { padding-left:2px; }
+  .half h3 { margin:0 0 8px; font-size:11px; letter-spacing:.1em;
+             text-transform:uppercase; color:var(--dim); font-weight:500; }
+  .half h3.recent { margin-top:14px; }
+  /* The half is narrow, so the label column has to be too, or "both fleets
+     down" wraps onto two lines beside a one-word value. */
+  .half td.k { width:auto; padding-right:10px; }
+  /* One lobby: its number, who is in it, and how far the game has got. The
+     whole row is the control -- a five-row list does not need five buttons. */
+  .room { display:flex; gap:8px; align-items:baseline; width:100%; text-align:left;
+          background:none; border:0; border-bottom:1px solid var(--line);
+          padding:5px 4px; color:var(--ink); font:inherit; font-size:12px;
+          cursor:pointer; }
+  .room:hover { background:#182030; }
+  .room.sel { background:#1b2739; color:var(--on); }
+  .room .n { color:var(--on); width:1.6em; }
+  .room.sel .n { color:var(--ink); }
+  .room .who { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .room .count { color:var(--dim); font-size:11px; }
+  .room.playing .count { color:var(--ok); }
+  /* Recent actions: the log, filtered to this lobby and stripped to what a
+     person watching a game wants -- who, and what they did. */
+  .act { display:flex; gap:8px; font-size:11px; padding:3px 0;
+         border-bottom:1px solid var(--line); }
+  .act .at { color:var(--dim); white-space:nowrap; }
+  .act .who { color:var(--on); max-width:8em; overflow:hidden;
+              text-overflow:ellipsis; white-space:nowrap; }
+  .act .what { color:var(--ink); flex:1; }
+
+  /* Narrow screens -- a phone held upright, or half a laptop screen -- have
+     no room for two columns, so the panels stack in reading order: the server
+     output first, since it is what you came to look at, then the players,
+     then the controls. Flex rather than grid here because the whole point is
+     that each panel takes the height its content needs and the page scrolls,
+     which is what a fixed-height grid of quadrants cannot do.
+     The splitters go with the columns they were sizing: there is nothing to
+     drag when everything is full width. */
+  @media (max-width: 820px) {
+    .grid { display:flex; flex-direction:column; gap:12px; height:auto;
+            min-height:calc(100vh - 47px); }
+    .stack { display:flex; flex-direction:column; gap:12px; }
+    .sep { display:none; }
+    /* Tall enough to be worth showing, short enough that the next panel is
+       not pushed off the bottom of the phone. */
+    .grid > section, .stack > section { flex:none; }
+    #log { max-height:52vh; }
+    /* One column, one splitter track collapsed away, and the halves divided
+       by a rule instead of a gutter. */
+    .split { grid-template-columns:minmax(0, 1fr); }
+    .half.right { border-top:1px solid var(--line); padding:12px 0 0; margin-top:12px; }
+    .half { overflow:visible; }
+  }
+</style>
+
+<header>
+  <h1>BATTLESHIP RELAY</h1>
+  <span class="where" id="where"></span>
+  <span id="conn"><span class="dot" id="dot"></span><span id="connText">connecting</span></span>
+</header>
+
+<div class="grid">
+  <section>
+    <h2>Server output</h2>
+    <div class="body" id="log">
+      <table id="logTable">
+        <colgroup id="cols"></colgroup>
+        <thead><tr id="logHead"></tr></thead>
+        <tbody id="logRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Players, split down the middle: the main lobby on the left as the
+       players themselves see it, and whichever game lobby is selected on the
+       right. Five games run at once, so "the players" is a question with five
+       answers and the operator picks which one they are watching. -->
+  <button class="sep" id="splitH" role="separator" aria-orientation="vertical"
+          aria-label="Resize the server output. Arrow keys move it; double-click resets it."
+          title="Drag, or use the arrow keys. Double-click to reset."></button>
+
+  <div class="stack" id="stack">
+  <section>
+    <h2>Players</h2>
+    <div class="body split">
+      <div class="half">
+        <h3>Main lobby</h3>
+        <div id="rooms"></div>
+        <p class="note" id="roomsNote"></p>
+      </div>
+      <button class="sep" id="splitP" role="separator" aria-orientation="vertical"
+              aria-label="Resize the main lobby against the lobby being watched. Arrow keys move it; double-click resets it."
+              title="Drag, or use the arrow keys. Double-click to reset."></button>
+      <div class="half right">
+        <h3 id="roomTitle">Lobby 1</h3>
+        <div id="seats"></div>
+        <table id="match"></table>
+        <p class="note" id="matchNote"></p>
+        <h3 class="recent">Recent actions</h3>
+        <div id="actions"></div>
+      </div>
+    </div>
+  </section>
+
+  <button class="sep" id="splitV" role="separator" aria-orientation="horizontal"
+          aria-label="Resize players and controls. Arrow keys move it; double-click resets it."
+          title="Drag, or use the arrow keys. Double-click to reset."></button>
+
+  <section>
+    <h2>Controls <span class="on-lobby" id="controlsLobby"></span></h2>
+    <div class="body">
+      <!-- Three groups, in the order an operator reaches for them: move the
+           players, start the game over, then the things that are about this
+           browser rather than about the match. Each is labelled, because a
+           column of eight identical buttons is not a control panel. -->
+      <div class="group">
+        <h3>Send this lobby to a page</h3>
+        <div class="pages" id="pages"></div>
+        <p class="note" id="pageNote"></p>
+      </div>
+
+      <div class="group">
+        <h3>Start over</h3>
+        <div class="pages">
+          <button id="restart">Restart match</button>
+          <button id="hardRestart">Hard restart</button>
+        </div>
+        <p class="note" id="restartNote"
+           title="Restart clears the recorded match. Hard restart also sends both players back to the title, keeping them connected so the handshake completes at once.">Restart
+           clears the match; hard restart also sends both players to the title.</p>
+      </div>
+
+      <div class="group last">
+        <h3>This browser</h3>
+        <!-- Three across rather than two and a half: this group is the one
+             furthest down the panel, and a laptop screen was cutting the last
+             button off. Each carries a title, since the labels are short. -->
+        <div class="pages three">
+          <button id="csv" title="Download the whole match as a spreadsheet. Needs the admin token: every fleet row carries a ship's position.">Match CSV</button>
+          <button id="token" title="The token the relay printed at startup. The control buttons need it.">Admin token</button>
+          <!-- Everything this browser remembers about the dashboard: column
+               widths, which columns are collapsed, the panel sizes, the lobby
+               being watched, and the admin token. Nothing here is on the
+               relay, so clearing it affects this browser and nobody's game. -->
+          <button id="forget" title="Clear the column widths, panel sizes, watched lobby and admin token kept in this browser.">Clear saved</button>
+        </div>
+        <p class="note" id="forgetNote"
+           title="Column widths, which columns are collapsed, the panel sizes, the watched lobby and the admin token. None of it is on the relay.">Layout,
+           watched lobby and token are kept in this browser only.</p>
+      </div>
+    </div>
+  </section>
+  </div>
+</div>
+
+<!-- Versioned so a cached script can never pair with a fresh page. The two
+     files are one unit: app.js reaches for elements this HTML declares, and a
+     stale copy of either leaves a panel blank with nothing to say why. Bump
+     this whenever they change together. -->
+<script type="module" src="app.js?v=15"></script>

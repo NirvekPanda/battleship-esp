@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>battleship-esp simulator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230a0e14'/%3E%3Cpath d='M2 10h12l-2 3H4z' fill='%2333ccff'/%3E%3Crect x='7' y='3' width='2' height='6' fill='%2333ccff'/%3E%3C/svg%3E">
+<style>
+  :root { color-scheme: dark; }
+  /* Border-box everywhere: a width of 100% or 90vw that then has padding and
+     a border added to it is a box wider than what it sits in, which is how
+     the name field came to hang out of its own card. */
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #14181f; color: #c3ccd9;
+    -webkit-text-size-adjust: 100%;
+    font: 14px ui-monospace, SFMono-Regular, Menlo, monospace;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 22px; padding: 32px;
+  }
+  h1 { margin: 0; display: flex; flex-direction: column; align-items: center;
+       gap: 6px; font-size: 26px; font-weight: 600; letter-spacing: .22em;
+       color: #c3ccd9; text-transform: none; }
+  h1 span { font-size: 11px; font-weight: 400; letter-spacing: .16em;
+            text-transform: uppercase; color: #6b7789; }
+
+  /* The two panels in ONE frame, with the rule between them shared: the
+     bottom edge of the top screen is the top edge of the bottom one. Two
+     separate boxes made the page look like a photograph of two components;
+     one box with a divider looks like the thing you are playing on. */
+  .device {
+    display: flex; flex-direction: column;
+    background: #0a0e14; border: 1px solid #2a3240; border-radius: 8px;
+    padding: 8px; gap: 8px; max-width: 92vw;
+  }
+  canvas {
+    width: 512px; max-width: 100%; height: auto; display: block;
+    /* The panels are the controls on a phone: a swipe across one is a
+       direction, not a scroll, so the browser must not claim the gesture. */
+    touch-action: none; -webkit-user-select: none; user-select: none;
+    image-rendering: pixelated;              /* keep OLED pixels crisp */
+    background: #0a0e14;
+  }
+  /* The shared border: one line, drawn once, belonging to both screens. */
+  #bottom { border-top: 1px solid #2a3240; padding-top: 8px; }
+
+  /* Under the screens: start again, who you are, how to play. */
+  .bar { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap;
+         justify-content: center; width: min(512px, 92vw); }
+  .bar > button { flex: 0 0 auto; }
+  .namebox { display: flex; gap: 6px; flex: 1 1 160px; min-width: 0; }
+  .namebox input {
+    flex: 1 1 auto; min-width: 0; box-sizing: border-box;
+    font: inherit; font-size: 12px; letter-spacing: .06em; text-align: center;
+    background: #0a0e14; color: #c3ccd9; border: 1px solid #333d4d;
+    border-radius: 5px; padding: 7px 10px;
+  }
+  .namebox input:focus { outline: none; border-color: #33ccff; }
+  /* Shadowed out once a game is on: a name is a thing you are, and changing
+     it mid-match would be changing who the relay thinks is playing. */
+  .namebox input:disabled { opacity: .45; cursor: not-allowed; }
+  #btn-save { border-color: #33ccff; color: #33ccff; }
+  .warn { margin: 0; font-size: 11px; color: #e2b8c6; text-align: center;
+          max-width: min(512px, 92vw); }
+
+  /* The five-way switch, drawn as it sits under a thumb. */
+  .dpad { display: grid; grid-template-columns: repeat(3, 44px);
+          grid-template-rows: repeat(3, 44px); gap: 8px; justify-content: center;
+          margin: 4px 0 16px; }
+  .key { display: grid; place-items: center; background: #1c2230;
+         border: 1px solid #333d4d; border-radius: 6px; }
+  .key svg { width: 20px; height: 20px; fill: #33ccff; }
+  .key.up { grid-area: 1 / 2; } .key.left { grid-area: 2 / 1; }
+  .key.mid { grid-area: 2 / 2; } .key.right { grid-area: 2 / 3; }
+  .key.down { grid-area: 3 / 2; }
+  /* What you press, a dash, what it does. The dash is a column of its own so
+     every action lines up whatever the label beside it is -- including the
+     second thing centre does, which sits under the first with no label. */
+  .how { display: grid; grid-template-columns: auto auto 1fr;
+         gap: 7px 10px; align-items: baseline;
+         margin: 0 0 16px; font-size: 12px; line-height: 1.5; color: #c3ccd9; }
+  .how .in { color: #33ccff; font-weight: 600; white-space: nowrap; }
+  .how .dash { color: #566070; }
+  /* A little air where one gesture ends and the next begins, so the two
+     things centre does read as one pair rather than as four separate lines. */
+  .how .sp { margin-top: 6px; }
+  /* On a phone the label and the action stack instead of being squeezed:
+     "Centre / Tap / Space" plus an action does not fit a 350px card. */
+  @media (max-width: 430px) {
+    .how { grid-template-columns: 1fr; gap: 0; }
+    .how .dash { display: none; }
+    .how .in { margin-top: 10px; }
+    .how .in + span, .how .dash + span { margin-top: 0; }
+  }
+  /* Browser-only page selector. There is no equivalent on the device: the
+     firmware has no button mapping for pages, so it shows the start page. */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+              justify-content: center; }
+  /* Must outrank .controls above. A class selector beats the browser's own
+     [hidden] { display: none } rule, so without this the settings tray stays
+     on screen while claiming to be hidden -- visible, but gone from the
+     accessibility tree, which is the worst of both. */
+  [hidden] { display: none !important; }
+  button, select {
+    font: inherit; font-size: 12px; letter-spacing: .06em;
+    background: #1c2230; color: #c3ccd9; border: 1px solid #333d4d;
+    border-radius: 5px; padding: 7px 12px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: #4a5668; }
+  button[aria-pressed="true"] { background: #33ccff; border-color: #33ccff; color: #0a0e14; }
+  #btn-reset { border-color: #4d3340; color: #e2b8c6; }
+  #btn-reset:hover { border-color: #8f5b70; }
+  /* The name modal: a plain overlay, dismissed only by answering it. */
+  .modal { position:fixed; inset:0; background:#0a0e14ee; display:grid;
+           place-items:center; z-index:10; }
+  .modal[hidden] { display:none; }
+  .card { background:#121821; border:1px solid #2a3240; border-radius:8px;
+          padding:22px 24px; width:min(420px,90vw); }
+  .card h2 { margin:0 0 8px; font-size:14px; letter-spacing:.1em; color:#33ccff; }
+  .card p { margin:0 0 14px; font-size:12px; color:#6b7789; line-height:1.5; }
+  /* border-box, or the padding and the border are added to the 100% and the
+     box hangs out past the card it is in. */
+  .card input[type=text], .card input:not([type]) {
+    box-sizing:border-box; width:100%; max-width:100%;
+    font:inherit; font-size:14px; padding:9px 10px; margin-bottom:6px;
+    background:#0a0e14; color:#c3ccd9; border:1px solid #333d4d; border-radius:5px; }
+  .card input:focus { outline:none; border-color:#33ccff; }
+  /* Says what a name may be, and turns into the complaint when it is not. */
+  .hintline { font-size:11px; color:#566070; margin:0 0 12px; min-height:1.2em; }
+  .hintline.bad { color:#e2b8c6; }
+  .card .row { display:flex; gap:16px; margin-bottom:14px; font-size:12px; }
+  .card button { width:100%; }
+  .tiny { font-size:10px; color:#566070; margin-top:10px; word-break:break-all; }
+
+</style>
+</head>
+<body>
+  <!-- Asked once, before anything connects: the name travels with the player
+       to the other side, so it has to exist before the connection does. -->
+  <div id="nameModal" class="modal">
+    <form class="card" id="nameForm">
+      <h2>WHO ARE YOU?</h2>
+      <p>Pick a name. Red and black belong to the boards, which have no
+         keyboard to be named with; you get the name you type.</p>
+      <input id="nameInput" maxlength="16" autocomplete="off" spellcheck="false"
+             placeholder="name" inputmode="text">
+      <p class="hintline" id="nameHint">Up to 16 characters &mdash; that is what
+         a 128px panel line holds.</p>
+      <button type="submit">ENTER THE LOBBY</button>
+    </form>
+  </div>
+
+  <h1>BATTLESHIP<span>ESP32 &amp; WASM crossplay</span></h1>
+
+  <!-- One device with two panels, not two pictures of hardware: a single
+       frame around both, and the rule between them is shared -- the bottom of
+       the top screen IS the top of the bottom one. The pin-out headings that
+       used to sit above each are of interest to whoever is wiring a board,
+       not to whoever is playing. -->
+  <div class="device">
+    <canvas id="top"></canvas>
+    <canvas id="bottom"></canvas>
+  </div>
+
+  <!-- Everything a player needs under the screens, and nothing else: start
+       again, who they are, and how to play. -->
+  <div class="bar">
+    <button id="btn-reset" title="Start again from the title screen">RESET</button>
+    <div class="namebox">
+      <input id="btn-name" maxlength="16" autocomplete="off" spellcheck="false"
+             aria-label="Your name" placeholder="name">
+      <button id="btn-save" hidden>SAVE</button>
+    </div>
+    <button id="btn-controls" aria-haspopup="dialog">CONTROLS</button>
+  </div>
+  <p class="warn" id="nameWarn" hidden>Changing your name starts you over:
+     the game restarts and you rejoin the lobby as that player.</p>
+
+  <!-- The five-way switch the boards have, drawn as it sits under a thumb. -->
+  <div id="controlsModal" class="modal" hidden>
+    <div class="card" role="dialog" aria-modal="true" aria-labelledby="controlsTitle">
+      <h2 id="controlsTitle">CONTROLS</h2>
+      <div class="dpad" aria-hidden="true">
+        <span class="key up"><svg viewBox="0 0 20 20"><polygon points="10,5 16,15 4,15"/></svg></span>
+        <span class="key left"><svg viewBox="0 0 20 20"><polygon points="5,10 15,4 15,16"/></svg></span>
+        <span class="key mid"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="5"/></svg></span>
+        <span class="key right"><svg viewBox="0 0 20 20"><polygon points="15,10 5,4 5,16"/></svg></span>
+        <span class="key down"><svg viewBox="0 0 20 20"><polygon points="10,15 4,5 16,5"/></svg></span>
+      </div>
+      <!-- Three columns: what you press, a dash, what it does. A press that
+           does two things gets two lines under one label rather than a
+           sentence listing them, so the eye can find "what does centre do"
+           without reading prose. -->
+      <div class="how">
+        <span class="in">Arrows / Swipe</span><span class="dash">&mdash;</span>
+        <span>Move crosshair / ship</span>
+
+        <span class="in sp">Centre / Tap / Space</span><span class="dash sp">&mdash;</span>
+        <span class="sp">Rotate the ship</span>
+        <span></span><span class="dash">&mdash;</span>
+        <span>Fire at the crosshair</span>
+
+        <span class="in sp">Double tap centre</span><span class="dash sp">&mdash;</span>
+        <span class="sp">Place the ship</span>
+
+        <span class="in sp">Hold centre</span><span class="dash sp">&mdash;</span>
+        <span class="sp">Return to the lobby</span>
+      </div>
+      <button id="btn-controls-close">CLOSE</button>
+    </div>
+  </div>
+
+
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>

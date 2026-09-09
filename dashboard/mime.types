@@ -1,0 +1,20 @@
+# Shipped with the repo rather than included from the system.
+#
+# nginx's own mime.types lives in a different place on every platform --
+# /opt/homebrew/etc/nginx on Apple Silicon, /usr/local/etc/nginx on Intel,
+# /etc/nginx on Debian -- so an absolute include is a config that starts on
+# the machine it was written on and nowhere else. This is everything the
+# dashboard and the game page actually serve.
+types {
+    text/html                             html htm;
+    text/css                              css;
+    text/plain                            txt;
+    text/csv                              csv;
+    application/javascript                js mjs;
+    application/json                      json map;
+    application/wasm                      wasm;
+    image/svg+xml                         svg;
+    image/png                             png;
+    image/x-icon                          ico;
+    font/woff2                            woff2;
+}
