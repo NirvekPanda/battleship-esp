@@ -455,15 +455,16 @@ function askName(): Promise<void> {
         const at = Math.min(input.selectionStart ?? fixed.length, fixed.length);
         input.value = fixed;
         input.setSelectionRange(at, at);
-        hint.textContent = `Names are ${NAME_MAX} characters of plain text.`;
+        hint.textContent = "Plain text only.";
         hint.classList.add("bad");
         return;
       }
       hint.classList.remove("bad");
+      // Only near the limit, and only the number: a count that is always on
+      // screen is noise, and the reason for the limit is not the player's
+      // problem.
       const left = NAME_MAX - [...fixed].length;
-      hint.textContent = left <= 4
-        ? `${left} character${left === 1 ? "" : "s"} left.`
-        : `Up to ${NAME_MAX} characters \u2014 that is what a panel line holds.`;
+      hint.textContent = left <= 4 ? `${left} left` : "";
     });
 
     form.addEventListener("submit", (e) => {

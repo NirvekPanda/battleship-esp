@@ -307,7 +307,7 @@ async function pollLog() {
           lines.some((l) => l.detail === "a ship, placed")) {
         redactionNoted = true;
         $("pageNote").textContent =
-          "Ship placements are hidden. Press Token and paste the relay's admin token to see them.";
+          "Placements hidden \u2014 no admin token.";
       }
 
       const box = $("log");

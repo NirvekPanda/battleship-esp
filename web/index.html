@@ -48,7 +48,7 @@
   .bar { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap;
          justify-content: center; width: min(512px, 92vw); }
   .bar > button { flex: 0 0 auto; }
-  .namebox { display: flex; gap: 6px; flex: 1 1 160px; min-width: 0; }
+  .namebox { display: flex; gap: 6px; flex: 0 1 180px; min-width: 0; max-width: 100%; }
   .namebox input {
     flex: 1 1 auto; min-width: 0; box-sizing: border-box;
     font: inherit; font-size: 12px; letter-spacing: .06em; text-align: center;
@@ -126,7 +126,9 @@
     background:#0a0e14; color:#c3ccd9; border:1px solid #333d4d; border-radius:5px; }
   .card input:focus { outline:none; border-color:#33ccff; }
   /* Says what a name may be, and turns into the complaint when it is not. */
-  .hintline { font-size:11px; color:#566070; margin:0 0 12px; min-height:1.2em; }
+  /* Height is reserved even when empty, so a complaint appearing does not
+     shove the button down under the cursor going for it. */
+  .hintline { font-size:11px; color:#566070; margin:0 0 4px; min-height:1.1em; }
   .hintline.bad { color:#e2b8c6; }
   .card .row { display:flex; gap:16px; margin-bottom:14px; font-size:12px; }
   .card button { width:100%; }
@@ -140,13 +142,12 @@
   <div id="nameModal" class="modal">
     <form class="card" id="nameForm">
       <h2>WHO ARE YOU?</h2>
-      <p>Pick a name. Red and black belong to the boards, which have no
-         keyboard to be named with; you get the name you type.</p>
       <input id="nameInput" maxlength="16" autocomplete="off" spellcheck="false"
              placeholder="name" inputmode="text">
-      <p class="hintline" id="nameHint">Up to 16 characters &mdash; that is what
-         a 128px panel line holds.</p>
-      <button type="submit">ENTER THE LOBBY</button>
+      <!-- Empty until there is something to say: it carries the complaint
+           when a name will not do, and nothing otherwise. -->
+      <p class="hintline" id="nameHint"></p>
+      <button type="submit">ENTER</button>
     </form>
   </div>
 
@@ -165,7 +166,7 @@
   <!-- Everything a player needs under the screens, and nothing else: start
        again, who they are, and how to play. -->
   <div class="bar">
-    <button id="btn-reset" title="Start again from the title screen">RESET</button>
+    <button id="btn-reset" title="Start over">RESET</button>
     <div class="namebox">
       <input id="btn-name" maxlength="16" autocomplete="off" spellcheck="false"
              aria-label="Your name" placeholder="name">
@@ -173,8 +174,7 @@
     </div>
     <button id="btn-controls" aria-haspopup="dialog">CONTROLS</button>
   </div>
-  <p class="warn" id="nameWarn" hidden>Changing your name starts you over:
-     the game restarts and you rejoin the lobby as that player.</p>
+  <p class="warn" id="nameWarn" hidden>Changing your name restarts the game.</p>
 
   <!-- The five-way switch the boards have, drawn as it sits under a thumb. -->
   <div id="controlsModal" class="modal" hidden>
