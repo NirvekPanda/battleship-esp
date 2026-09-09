@@ -305,20 +305,20 @@ func TestPlacementPackingRoundTrip(t *testing.T) {
 
 func TestFleetDescribe(t *testing.T) {
 	p := Packet{T: TFleet, A: 2, B: uint8((3 + 4*BoardSize) * 2)}
-	if got, want := p.Describe(), "fleet  CRUISER at E3 across, ship #3 of 5, 3 long"; got != want {
+	if got, want := p.Describe(), "fleet  CRUISER at E3 across (3)"; got != want {
 		t.Fatalf("Describe() = %q, want %q", got, want)
 	}
 }
 
-// Every ship, so the number and the length cannot drift apart from the name
-// they are printed beside: ship #N is the Nth name and the Nth length.
-func TestFleetDescribeNumbersAndLengths(t *testing.T) {
+// Every ship, so the bracketed length cannot drift apart from the name it is
+// printed beside: the Nth name is followed by the Nth length.
+func TestFleetDescribeLengths(t *testing.T) {
 	want := []string{
-		"fleet  CARRIER at A0 across, ship #1 of 5, 5 long",
-		"fleet  BATTLESHIP at A0 across, ship #2 of 5, 4 long",
-		"fleet  CRUISER at A0 across, ship #3 of 5, 3 long",
-		"fleet  SUBMARINE at A0 across, ship #4 of 5, 3 long",
-		"fleet  DESTROYER at A0 across, ship #5 of 5, 2 long",
+		"fleet  CARRIER at A0 across (5)",
+		"fleet  BATTLESHIP at A0 across (4)",
+		"fleet  CRUISER at A0 across (3)",
+		"fleet  SUBMARINE at A0 across (3)",
+		"fleet  DESTROYER at A0 across (2)",
 	}
 	for i := range shipNames {
 		p := Packet{T: TFleet, A: uint8(i), B: 0}
@@ -332,11 +332,11 @@ func TestFleetDescribeNumbersAndLengths(t *testing.T) {
 // fleet back describes it exactly as the original packet did.
 func TestFleetDescribeVerticalAndMyFleet(t *testing.T) {
 	down := Packet{T: TFleet, A: 0, B: uint8((3+4*BoardSize)*2 + 1)}
-	if got, want := down.Describe(), "fleet  CARRIER at E3 down, ship #1 of 5, 5 long"; got != want {
+	if got, want := down.Describe(), "fleet  CARRIER at E3 down (5)"; got != want {
 		t.Fatalf("Describe() = %q, want %q", got, want)
 	}
 	mine := Packet{T: TMyFleet, A: 0, B: uint8((3+4*BoardSize)*2 + 1)}
-	if got, want := mine.Describe(), "myfleet CARRIER at E3 down, ship #1 of 5, 5 long"; got != want {
+	if got, want := mine.Describe(), "myfleet CARRIER at E3 down (5)"; got != want {
 		t.Fatalf("Describe() = %q, want %q", got, want)
 	}
 }

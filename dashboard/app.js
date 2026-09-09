@@ -106,6 +106,10 @@ const PAGES = [
 // localStorage so it survives a reload; it is an operator credential for a
 // local service, not a user secret.
 let adminToken = localStorage.getItem("adminToken") ?? "";
+// Said once, when the relay first answers with a placement held back: the
+// dashboard otherwise shows "a ship, placed" for ever and gives no hint that
+// a token is the thing missing.
+let redactionNoted = false;
 
 let logCursor = 0;
 let bothReady = false;
@@ -298,6 +302,13 @@ async function pollLog() {
       if (!res.ok) throw new Error(res.status);
       const { lines, next } = await res.json();
       logCursor = next;
+
+      if (!redactionNoted && !adminToken &&
+          lines.some((l) => l.detail === "a ship, placed")) {
+        redactionNoted = true;
+        $("pageNote").textContent =
+          "Ship placements are hidden. Press Token and paste the relay's admin token to see them.";
+      }
 
       const box = $("log");
       const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;

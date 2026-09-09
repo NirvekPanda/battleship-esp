@@ -309,12 +309,9 @@ var pageNames = [...]string{
 var resultNames = [...]string{"MISS", "HIT", "SUNK"}
 var shipNames = [...]string{"CARRIER", "BATTLESHIP", "CRUISER", "SUBMARINE", "DESTROYER"}
 
-// placement renders a fleet packet's payload: which ship it is by name and by
-// number, how long it is, and which way it faces. The name comes first because
-// Describe() splits on the first space to slot the cell in after it.
-//
-// Ships are 0..4 in the packet and #1..#5 here: a player counting their ships
-// starts at one, and this line is read by people, not by the core.
+// placement renders a fleet packet's payload: which ship it is, which way it
+// faces, and how many cells long it is in brackets. The name comes first
+// because Describe() splits on the first space to slot the cell in after it.
 func placement(idx uint8, vertical bool) string {
 	name := "ship?"
 	length := 0
@@ -326,8 +323,7 @@ func placement(idx uint8, vertical bool) string {
 	if vertical {
 		facing = "down"
 	}
-	return fmt.Sprintf("%s %s, ship #%d of %d, %d long",
-		name, facing, idx+1, len(shipNames), length)
+	return fmt.Sprintf("%s %s (%d)", name, facing, length)
 }
 
 // Describe renders a packet as one line of English for the terminal. The
