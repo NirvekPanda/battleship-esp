@@ -137,8 +137,10 @@ void loop() {
   }
   wasSeated = netSeated();
 
-  if (resetPending && (gameCore.page() != game::Page::Over ||
-                       now - seatLostAt >= game::VERDICT_MS)) {
+  // Not while the verdict is up: that page shows the answer, then both
+  // boards, and leaves when the player presses. The seat being gone is not a
+  // reason to take it off them.
+  if (resetPending && gameCore.page() != game::Page::Over) {
     resetPending = false;
     Serial.println(F("lobby:  seat gone -- back to the lobby list"));
     gameCore.begin();

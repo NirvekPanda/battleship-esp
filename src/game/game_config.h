@@ -35,11 +35,13 @@ constexpr uint32_t HOLD_MS = 800;
 // warning and the way out of it -- let go and nothing happened.
 constexpr uint32_t LEAVE_HOLD_MS = 5000;
 
-// How long the verdict stands before the board goes back to the lobby list.
-// A match ends by the relay clearing the lobby, which takes the seat with it,
-// so the news that the game is over arrives a moment after WIN or LOSE goes
-// up -- and acting on it at once takes the answer off the screen.
-constexpr uint32_t VERDICT_MS = 6000;
+// How long the verdict has the bottom panel to itself before it gives way to
+// the two boards. Three seconds is long enough to read WIN or LOSE and the
+// name under it, and short enough that nobody is waiting on it.
+//
+// It also blocks: a press during those three seconds does nothing, so the
+// press that fired the winning shot cannot skip past the answer to it.
+constexpr uint32_t VERDICT_MS = 3000;
 
 // How long a shot result stays up before the board comes back.
 constexpr uint32_t OVERLAY_MS = 3000;

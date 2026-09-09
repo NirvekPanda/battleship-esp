@@ -175,6 +175,12 @@ int centerScaledX(const char *s, int scale) {
 
 int centerTextX(const char *s) { return centerScaledX(s, 1); }
 
+int centerTinyIn(const char *s, int left, int right) {
+  int w = Screen::textTinyWidth(s);
+  if (w > 0) w -= 1;  // the trailing gap after the last glyph
+  return left + (right - left + 1 - w) / 2;
+}
+
 void drawTick(Screen &s, int x, int y, int size, bool on) {
   if (size < 4) return;
   const int shortArm = size / 3;      // down-right into the elbow

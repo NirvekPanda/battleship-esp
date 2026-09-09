@@ -1,0 +1,33 @@
+# Grafana, pointed at the relay.
+#
+#   cd deploy/grafana && RELAY=http://192.168.86.220:8090 ADMIN_TOKEN=... docker compose up -d
+#
+# Two plugins do the work: Infinity reads the relay's JSON straight from its
+# HTTP endpoints (no exporter, no database), and Business Forms turns a panel
+# into buttons that POST back to it. Everything else is stock Grafana.
+services:
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: battleship-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_INSTALL_PLUGINS: "yesoreyeram-infinity-datasource,volkovlabs-form-panel"
+      # The relay and its admin token, read by the provisioned datasource.
+      RELAY_URL: "${RELAY:-http://host.docker.internal:8090}"
+      RELAY_ADMIN_TOKEN: "${ADMIN_TOKEN:-}"
+      # A lobby list changes in seconds, not minutes, so the dashboard has to
+      # be allowed to ask that often.
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: "1s"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./provisioning:/etc/grafana/provisioning
+      - ./dashboards:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  grafana-data:

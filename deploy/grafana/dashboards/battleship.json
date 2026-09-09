@@ -1,0 +1,297 @@
+{
+  "uid": "battleship",
+  "title": "Battleship relay",
+  "tags": [
+    "battleship"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "table",
+      "title": "Server output",
+      "id": 1,
+      "gridPos": {
+        "h": 22,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "description": "Every line the relay prints, in columns. The lobby column separates the five games from the main lobby.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "battleship-relay"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "/v1/log?since=0",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "lines",
+          "columns": [
+            {
+              "selector": "at",
+              "text": "when",
+              "type": "timestamp"
+            },
+            {
+              "selector": "scope",
+              "text": "lobby",
+              "type": "string"
+            },
+            {
+              "selector": "page",
+              "text": "page",
+              "type": "string"
+            },
+            {
+              "selector": "player",
+              "text": "from",
+              "type": "string"
+            },
+            {
+              "selector": "to",
+              "text": "to",
+              "type": "string"
+            },
+            {
+              "selector": "kind",
+              "text": "type",
+              "type": "string"
+            },
+            {
+              "selector": "cell",
+              "text": "cell",
+              "type": "string"
+            },
+            {
+              "selector": "detail",
+              "text": "detail",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "when",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lobby"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "when"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "table",
+      "title": "Players by lobby",
+      "id": 2,
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "description": "The five numbered lobbies and who is sitting in each. A row with a match id is a game in progress.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "battleship-relay"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "/v1/rooms",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "rooms",
+          "columns": [
+            {
+              "selector": "n",
+              "text": "lobby",
+              "type": "number"
+            },
+            {
+              "selector": "players",
+              "text": "players",
+              "type": "string"
+            },
+            {
+              "selector": "match",
+              "text": "match",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lobby"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "volkovlabs-form-panel",
+      "title": "Lobby controls",
+      "id": 3,
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 12,
+        "y": 11
+      },
+      "description": "Server-side controls, per lobby. Every one of these needs the admin token, which the datasource sends.",
+      "options": {
+        "initial": {
+          "method": "NONE",
+          "code": ""
+        },
+        "update": {
+          "method": "POST",
+          "url": "/v1/force-page?room=${lobby}&page=${page}",
+          "code": ""
+        },
+        "buttonGroup": {
+          "orientation": "center",
+          "size": "md"
+        },
+        "submit": {
+          "text": "Send to page",
+          "variant": "primary",
+          "icon": "play"
+        },
+        "reset": {
+          "text": "Restart match",
+          "variant": "destructive",
+          "icon": "repeat"
+        },
+        "resetAction": {
+          "mode": "datasource",
+          "method": "POST",
+          "url": "/v1/restart",
+          "code": ""
+        },
+        "elements": [
+          {
+            "id": "lobby",
+            "title": "Lobby",
+            "type": "select",
+            "value": "1",
+            "options": [
+              {
+                "label": "Lobby 1",
+                "value": "1"
+              },
+              {
+                "label": "Lobby 2",
+                "value": "2"
+              },
+              {
+                "label": "Lobby 3",
+                "value": "3"
+              },
+              {
+                "label": "Lobby 4",
+                "value": "4"
+              },
+              {
+                "label": "Lobby 5",
+                "value": "5"
+              }
+            ]
+          },
+          {
+            "id": "page",
+            "title": "Send both players to",
+            "type": "radio",
+            "value": "0",
+            "options": [
+              {
+                "label": "Title",
+                "value": "0"
+              },
+              {
+                "label": "Place ships",
+                "value": "2"
+              },
+              {
+                "label": "Gameplay",
+                "value": "4"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

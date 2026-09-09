@@ -23,12 +23,10 @@ static const int8_t SIN64[64] = {
 // itself lives in gfx (see screen.h): every page centres the same way.
 int centerX(const char *s, int scale) { return gfx::centerScaledX(s, scale); }
 
-// The tiny font's cell is 4px and its glyphs are 3, so the same trailing gap
-// has to come off here too, or every hint line sits half a cell left.
+// The rule itself lives in gfx (see screen.h): every page centres the same
+// way, in the small font as in the large one.
 int centerTinyX(const char *s, int left, int right) {
-  int w = gfx::Screen::textTinyWidth(s);
-  if (w > 0) w -= 1;
-  return left + (right - left + 1 - w) / 2;
+  return gfx::centerTinyIn(s, left, right);
 }
 
 int clampv(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -113,6 +111,7 @@ void Game::setPage(Page p) {
   // it a jump straight to a result page would time out on arrival, because a
   // deadline of zero is always already past.
   if (p == Page::Starting) _waveUntil = 0;
+  if (p == Page::Over) _overSince = 0;
   if (p == Page::Hit || p == Page::Miss || p == Page::Sunk) _resultUntil = 0;
   // Jumping past the wave skips where _practice is decided, and a browser
   // dropped straight onto the match with no relay behind it would fire one
@@ -297,9 +296,21 @@ void Game::tick(const Input &in, uint32_t nowMs) {
       }
       break;
 
-    case Page::Over:
-      // The match is decided. There is nothing left to press.
+    case Page::Over: {
+      // The verdict first, alone on the panel and unpressable: the press that
+      // fired the winning shot must not skip the answer to it. Then both
+      // boards, for as long as anyone wants to look at them -- there is no
+      // timer on that, only a press.
+      if (_overSince == 0) _overSince = nowMs;
+      const bool banner = nowMs - _overSince < VERDICT_MS;
+      _press.update(in.center, nowMs);
+      if (!banner && _press.edge()) {
+        forgetMatch();
+        _myRoom = 0;
+        _page = Page::Rooms;
+      }
       break;
+    }
   }
 
   render(nowMs);
@@ -329,7 +340,7 @@ void Game::render(uint32_t nowMs) {
     case Page::Hit:
     case Page::Miss:
     case Page::Sunk:     renderResult(); break;
-    case Page::Over:     renderOver(); break;
+    case Page::Over:     renderOver(nowMs); break;
   }
 }
 

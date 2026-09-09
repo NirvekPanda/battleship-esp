@@ -1,11 +1,8 @@
-// The dashboard talks to the relay on its own origin: served either by the
-// relay itself on :8081, or by nginx with /v1 proxied through (see nginx.conf).
-// Either way these paths are relative, so neither needs CORS.
+// Same-origin: served by the relay on :8091, or by nginx with /v1 proxied.
+// Every path here is relative, so nothing needs CORS.
 
-// Every element app.js expects the page to provide. Checked once, up front,
-// because the alternative is a null reference part way through rendering: the
-// panel simply stays empty and the page gives no hint that anything is wrong.
-// The usual cause is a cached index.html paired with a fresh app.js.
+// Checked up front: a missing element is a stale index.html, and failing
+// here says so instead of leaving a panel silently empty.
 const NEEDED = [
   "logTable", "cols", "logHead",
   "log", "logRows", "seats", "match", "matchNote", "pages", "pageNote",
@@ -33,8 +30,8 @@ const $ = (id) => document.getElementById(id);
   }
 }
 
-// Every line still in the table, so a column being switched on can be filled
-// in for rows that are already there.
+// Kept as data as well as DOM, so switching a column on can fill in rows
+// that are already there.
 const KEEP = 500;
 const kept = [];
 
@@ -45,9 +42,7 @@ function redrawRows() {
   $("log").scrollTop = $("log").scrollHeight;
 }
 
-// One row, with a cell per visible column. A line from the relay itself has
-// no packet fields, so it gets a single cell spanning everything after the
-// timestamp rather than a row of blanks.
+// One row, a cell per visible column.
 function buildRow(line) {
   const tr = document.createElement("tr");
   const isPacket = Boolean(line.kind);
@@ -122,11 +117,8 @@ function setConnected(up, text) {
 
 // ---- columns -------------------------------------------------------------
 //
-// One entry per field the relay reports. Every packet type has to land in
-// these without anything being crammed together: a shot has a cell, a result
-// has none, a page packet comes from the server and goes to everyone. Squeeze
-// them into fewer columns and the parts that differ per type end up as prose
-// in one cell, which cannot be aligned, scanned or hidden.
+// One column per field the relay reports: fewer columns and the parts that
+// differ per packet type end up as prose in one cell.
 const COLUMNS = [
   { key: "when",   label: "when",   min: 60,  def: 118 },
   // Which lobby: "main" for the one everyone arrives in, "lobby N" for one of
@@ -142,9 +134,7 @@ const COLUMNS = [
   { key: "seq",    label: "seq",    min: 36,  def: 52,  off: true },
 ];
 
-// Widths and which columns are showing, both remembered: someone who widens
-// "detail" to read a long line, or hides "seq" because they are not chasing
-// duplicates, does not want to do it again on the next reload.
+// Widths and hidden columns are remembered per browser.
 const store = {
   read(key, fallback) {
     try {
@@ -170,13 +160,9 @@ let hidden = new Set(
 const shown = () => COLUMNS.filter((c) => !hidden.has(c.key));
 const widthOf = (c) => Math.max(c.min, Math.round(widths[c.key] ?? c.def));
 
-// The table is rebuilt from COLUMNS rather than written out in HTML, so a
-// column added there needs no matching edit to the page.
-//
-// Every column is always present. Collapsing one narrows it to its label and
-// blanks its cells; it does not leave the table. That keeps the control where
-// the column is -- a header that vanished would need a second place to put
-// the button that brings it back, and then two places to look.
+// Built from COLUMNS, so adding one needs no edit to the page. A collapsed
+// column stays in the table, narrowed: the control belongs where the column
+// is.
 function buildHead() {
   const cols = $("cols");
   const head = $("logHead");
@@ -335,9 +321,8 @@ async function pollLog() {
   }
 }
 
-// The CSV carries ship positions, so it is behind the admin token like the
-// other control routes -- which means it cannot be a plain link any more: a
-// link cannot carry a header. Fetched, then handed to the browser as a blob.
+// Admin-only (it is ship positions), so it cannot be a plain link: a link
+// carries no headers. Fetched, then handed over as a blob.
 async function downloadCsv() {
   try {
     const res = await fetch("/v1/packets.csv", {
@@ -361,12 +346,9 @@ async function downloadCsv() {
 
 // ---- what this browser remembers ---------------------------------------
 //
-// Column widths, collapsed columns, the panel sizes, the lobby being watched
-// and the admin token. All of it is local: none of it is on the relay, so
-// clearing it changes what this browser shows and nothing about any game.
-//
-// Listed by key rather than clearing the whole origin, so anything else
-// stored under it is left alone.
+// None of it is on the relay, so clearing it changes what this browser shows
+// and nothing about any game. Listed by key rather than clearing the origin,
+// so anything else stored there is left alone.
 const REMEMBERED = [
   "colWidths", "colHidden", "splitCol", "splitRow", "splitHalf", "watchRoom",
   "adminToken",
@@ -394,22 +376,13 @@ function forgetLocal() {
 
 // ---- panel sizes --------------------------------------------------------
 //
-// Three splitters, one rule between them: each owns a CSS variable on the
-// element whose tracks it divides, so a drag writes one custom property and
-// the browser does the layout.
-//
-//   --col   on .grid    the server output against everything else
-//   --row   on .stack   players against controls
-//   --half  on .split   the main lobby against the lobby being watched
-//
-// All three are remembered, all three clamp so neither side can be squeezed
-// out of existence, all three reset on a double-click, and all three move
-// with the arrow keys -- they are `role="separator"` buttons, so a keyboard
-// has to be able to work them.
+// Three splitters, each owning a CSS variable on the element whose tracks it
+// divides: --col on .grid, --row on .stack, --half on .split. All three are
+// remembered, clamped so neither side can vanish, reset on a double-click and
+// movable with the arrow keys.
 //
 // Below the mobile breakpoint they are display:none and the panels stack, so
-// nothing here runs: offsetParent is null for a hidden element, which is the
-// check every entry point makes.
+// offsetParent is null and every entry point here bails out.
 const SPLITS = {
   splitH: { box: () => document.querySelector(".grid"), prop: "--col", key: "splitCol", axis: "x", min: 260 },
   splitV: { box: () => $("stack"), prop: "--row", key: "splitRow", axis: "y", min: 150 },
@@ -454,10 +427,8 @@ function resetSize(cfg) {
 }
 
 function dragSplit(handle, cfg) {
-  // Two presses in quick succession with no drag between them is a
-  // double-click, counted here rather than left to the dblclick event: the
-  // pointer capture below swallows it, and a splitter that cannot be put back
-  // is one people are wary of moving in the first place.
+    // Counted here rather than left to the dblclick event: the pointer capture
+  // below swallows that one.
   let lastDown = 0;
   let moved = false;
 
@@ -523,12 +494,9 @@ function dragSplit(handle, cfg) {
 
 // ---- the main lobby, and the game lobby being watched -------------------
 //
-// Five games run at once, so "the players" is a question with five answers.
-// The left half is the main lobby exactly as the players see it on their own
-// panels; the right half is whichever of the five the operator has picked.
-//
-// Remembered, because someone watching lobby 3 does not want to find
-// themselves back on lobby 1 after a reload.
+// Five games run at once, so "the players" has five answers: the left half is
+// the main lobby as the players see it, the right half is whichever one the
+// operator picked. Remembered across reloads.
 let watching = Number(store.read("watchRoom", 1)) || 1;
 
 function selectRoom(n) {
@@ -579,9 +547,8 @@ function renderRooms(rooms) {
     : `${busy} of ${rooms.length} lobbies in use. Click one to watch it.`;
 }
 
-// The log, filtered to the lobby being watched: who did what, most recent
-// last. It is the same data the server-output panel shows, read the other way
-// round -- by player rather than by packet.
+// The server-output panel, filtered to this lobby and read by player rather
+// than by packet.
 function renderActions() {
   const box = $("actions");
   box.innerHTML = "";

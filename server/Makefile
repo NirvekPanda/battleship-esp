@@ -30,24 +30,18 @@ DASH_ADDR ?= 0.0.0.0:8081
 
 .DEFAULT_GOAL := help
 
-.PHONY: help debug run run-lan run-quiet run-espnow kill-port seats-clear dashboard build test fmt vet clean
+.PHONY: help run run-lan run-quiet run-espnow kill-port seats-clear dashboard build test fmt vet clean
 
-DEBUG_HELP := $(filter debug,$(MAKECMDGOALS))
-
-# Most of the time this is driven from the repo root by `make play`, so the
-# short help says so rather than listing everything it can do.
+# Most of the time this is driven from the repo root by `make play`, which
+# runs this and serves the page with it. One help, not two: what used to be
+# behind `make help debug` is here, because a target nobody can find is a
+# target nobody uses.
 help:
-ifeq ($(DEBUG_HELP),)
 	@echo "Match relay (Go $(shell $(GO) env GOVERSION 2>/dev/null))"
 	@echo ""
 	@echo "  Usually you want 'make play' from the repo root, which runs this"
 	@echo "  and serves the page with it."
 	@echo ""
-	@echo "  make run          this alone, on $(ADDR)"
-	@echo "  make test         the packet and routing tests"
-	@echo ""
-	@echo "  make help debug   the rest"
-else
 	@echo "Running"
 	@echo "  make run          every interface, on $(ADDR)"
 	@echo "  make run-lan      the same thing, named for what it does"
@@ -74,10 +68,7 @@ else
 	@echo "  make build        compile ./$(BIN)"
 	@echo "  make fmt vet test"
 	@echo "  make clean"
-endif
 
-debug:
-	@:
 
 # Bound to every interface, so anyone on the WiFi -- a board, a phone -- can
 # reach it. `make run ADDR=localhost:8080` keeps it to this machine.

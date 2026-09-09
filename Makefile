@@ -16,42 +16,34 @@ OUT  := web/sim.js
 
 EXPORTS := _sim_begin,_sim_set_input,_sim_set_link,_sim_set_self_peer,_sim_receive,_sim_take_outbound,_sim_my_turn,_sim_aim_col,_sim_aim_row,_sim_in_flight,_sim_set_page,_sim_page,_sim_set_hit_ship,_sim_tick,_sim_top,_sim_bottom,_sim_buf_size,_sim_width,_sim_height,_sim_lobby_name_max,_sim_clear_rooms,_sim_set_room,_sim_room_a_buf,_sim_room_b_buf,_sim_take_room_join,_sim_take_room_leave,_sim_set_my_room,_sim_room_count,_sim_set_names
 
-.PHONY: help debug help1 web play serve upload clean check test test-core
+.PHONY: help help1 web play serve upload clean check test test-core
 
-# A bare `make` prints the short help. The whole point of splitting help from
-# help-debug is that the way in should be obvious, and a bare `make` is what
-# someone tries first. Stated outright rather than left to target order, which
-# would otherwise make it whichever target happens to come first.
+# A bare `make` prints the help. Stated outright rather than left to target
+# order, which would otherwise make it whichever target happens to come first.
 .DEFAULT_GOAL := help
 
 # `help` lists what each target does. `help1` answers the other question --
 # what to run, and in what order, to get a match actually running. The two
 # ends have to be brought up in the right sequence, and the failures when they
 # are not are silent ones, so the order is worth writing down.
-# `make help` is the short list: the three commands that cover playing the
-# game. `make help debug` is everything else -- diagnostics, one-off tools and
-# the internals -- kept out of the way rather than deleted.
 #
-# The split is done by looking at the goals on the command line, so `make help`
-# and `make help debug` print different things rather than one printing both.
-DEBUG_HELP := $(filter debug,$(MAKECMDGOALS))
+# One help, not two. It used to hide everything but three commands behind
+# `make help debug`, which meant the answer to "how do I do X" was usually
+# behind a word nobody knew to type.
 
 help:
-ifeq ($(DEBUG_HELP),)
 	@echo "battleship-esp"
 	@echo ""
 	@echo "  make play      build everything and run it: the page and the relay"
 	@echo "                 together on http://localhost:8080"
 	@echo "                 Open that address. A second tab is the second player."
 	@echo "  make upload    flash the board and watch its serial output"
+	@echo "  make test      build every target and run every check"
 	@echo ""
 	@echo "  While play is running, the relay dashboard is at"
 	@echo "  http://localhost:8081 -- server output, who is connected,"
 	@echo "  buttons to send both players to a page, and a CSV of the match."
-	@echo "  make test      build every target and run every check"
 	@echo ""
-	@echo "  make help debug    diagnostics, tuning and everything else"
-else
 	@echo "Startup"
 	@echo "  make play                 build the page, then serve it AND the relay"
 	@echo "                            on :8080, bound to every interface so the"
@@ -113,11 +105,14 @@ else
 	@echo ""
 	@echo "  This machine is $(shell ipconfig getifaddr en0 2>/dev/null || echo '<no LAN address>');"
 	@echo "  SERVER_IP in include/config.h must match it for the board."
-endif
-
-# So `make help debug` does not fail on an unknown goal.
-debug:
-	@:
+	@echo ""
+	@echo "On a server"
+	@echo "  ./run.sh                  pull, build, serve: game on :8090,"
+	@echo "                            dashboard on :8091"
+	@echo "  sudo ./run.sh --install   the same, at boot, as a systemd service"
+	@echo "  sudo ./run.sh --nginx     battleship.nirvek.xyz and dashship.nirvek.xyz"
+	@echo "                            in front of the two ports"
+	@echo "  deploy/grafana/           the same dashboard in Grafana, if wanted"
 
 web: $(OUT) web/main.js
 

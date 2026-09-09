@@ -150,6 +150,19 @@ function touchControls(el: HTMLElement) {
 
   el.addEventListener("touchend", (e) => { e.preventDefault(); end(); }, { passive: false });
   el.addEventListener("touchcancel", () => { clearTimeout(holdTimer); touched.centre = false; });
+
+  // And the mouse, on the same terms: a click is centre, holding the button
+  // down is centre held. A desktop player should not have to know that space
+  // is the only way to answer a screen that says "press to leave".
+  el.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    touched.centre = true;
+  });
+  const release = () => { touched.centre = false; };
+  el.addEventListener("mouseup", release);
+  el.addEventListener("mouseleave", release);
+  addEventListener("blur", release);
 }
 
 function inputMask(): number {
@@ -766,13 +779,11 @@ async function pollForever() {
         // which invalidates the seat -- so the 401 that tells us the game is
         // over arrives a moment after the WIN or LOSE goes up, and resetting
         // on it took the answer off the screen before it could be read.
-        if (sim._sim_page() === PAGE.over) {
-          for (let i = 0; i < 24 && sim._sim_page() === PAGE.over; i++) {
-            // Or until they press: the verdict is worth a few seconds, not an
-            // argument about how long.
-            if (i > 2 && (inputMask() & M.center) !== 0) break;
-            await new Promise((r) => setTimeout(r, 250));
-          }
+        // For as long as they are still looking at it. The verdict page shows
+        // the answer, then both boards, and leaves when the player presses --
+        // so the seat being gone is not a reason to take it away from them.
+        while (sim._sim_page() === PAGE.over) {
+          await new Promise((r) => setTimeout(r, 250));
         }
         console.info("relay: seat lost, back to the lobby");
         peerToken = "";

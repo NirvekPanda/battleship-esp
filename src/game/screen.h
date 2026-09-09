@@ -89,6 +89,8 @@ private:
 // panel while a countdown runs.
 int centerScaledX(const char *s, int scale);
 int centerTextX(const char *s);
+// The same rule for the 3x5 font, between two x bounds -- a gutter, usually.
+int centerTinyIn(const char *s, int left, int right);
 
 // A tick and a cross, at an arbitrary size, for yes/no indicators. Drawn from
 // lines rather than set as glyphs because neither exists in either font.

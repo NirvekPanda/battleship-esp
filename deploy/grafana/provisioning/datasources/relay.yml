@@ -1,0 +1,22 @@
+# The relay itself is the data source: its endpoints already answer JSON in
+# the shape a table wants -- an array of objects -- so nothing has to be
+# scraped, stored or converted first.
+apiVersion: 1
+datasources:
+  - name: battleship-relay
+    uid: battleship-relay
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: ${RELAY_URL}
+    isDefault: true
+    jsonData:
+      auth_method: none
+      allowedHosts:
+        - ${RELAY_URL}
+      # The control routes need the admin token; the log holds ship positions
+      # back without it. Sent by Grafana's backend, so it never reaches a
+      # browser.
+      httpHeaderName1: X-Admin-Token
+      global_queries: []
+    secureJsonData:
+      httpHeaderValue1: ${RELAY_ADMIN_TOKEN}

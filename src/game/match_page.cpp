@@ -488,7 +488,7 @@ void Game::drawTurnReadout() {
 // The match is decided. The tracking grid stays up top -- the board you won
 // or lost on is the thing worth looking at -- and the bottom panel says which
 // it was, in the same frame the shot results use.
-void Game::renderOver() {
+void Game::renderOver(uint32_t nowMs) {
   // Their board, revealed. The match is over, so the one thing that was worth
   // keeping secret no longer is -- and where their ships actually were is the
   // first thing either player wants to know. Drawn in the same language as
@@ -498,38 +498,49 @@ void Game::renderOver() {
   drawFleetBoard(_top, _enemy, _tracking);
   drawGutterCount(_top, GUTTER_L_LEFT, "THEIR", "FLEET", _enemy.remaining(), SHIP_COUNT);
 
-  constexpr int MARGIN = 2;
-  constexpr int BORDER = LABEL_H - 1;
-  const int fw = gfx::W - 2 * MARGIN;
-  const int fh = gfx::H - 2 * MARGIN;
-  _bot.fillRect(MARGIN, MARGIN, fw, fh, true);
-  _bot.fillRect(MARGIN + BORDER, MARGIN + BORDER, fw - 2 * BORDER, fh - 2 * BORDER, false);
+  // The bottom panel says who won, and then becomes your own board, so the
+  // two layouts sit one above the other and can be compared. The banner has
+  // its moment first because a board is not an answer: WIN or LOSE is.
+  const bool banner = _overSince == 0 || nowMs - _overSince < VERDICT_MS;
+  if (banner) {
+    constexpr int MARGIN = 2;
+    constexpr int BORDER = LABEL_H - 1;
+    const int fw = gfx::W - 2 * MARGIN;
+    const int fh = gfx::H - 2 * MARGIN;
+    _bot.fillRect(MARGIN, MARGIN, fw, fh, true);
+    _bot.fillRect(MARGIN + BORDER, MARGIN + BORDER, fw - 2 * BORDER, fh - 2 * BORDER, false);
 
-  const char *word = _won ? "WIN" : "LOSE";
-  constexpr int SCALE = 3;
-  // Centred the same way as everything else. The hand-rolled formula here
-  // added a scale's worth of nudge on top of an advance-width centring, which
-  // put the word a pixel and a half right of the panel's middle.
-  _bot.textBubble(gfx::centerScaledX(word, SCALE), 15, word, SCALE);
+    const char *word = _won ? "WIN" : "LOSE";
+    constexpr int SCALE = 3;
+    _bot.textBubble(gfx::centerScaledX(word, SCALE), 15, word, SCALE);
 
-  // Whose win it is, by name. "WIN" says the same thing on both panels; the
-  // name is what makes the verdict a fact about the match rather than about
-  // the screen it is drawn on. It falls back to the outcome when there are no
-  // names -- a board playing alone, or a match that never had a lobby.
-  const char *winner = _won ? _myName : _theirName;
-  char line[LOBBY_NAME_CHARS + 6];
-  if (winner[0] != '\0') {
-    int n = 0;
-    for (const char *c = winner; *c && n < LOBBY_NAME_CHARS; c++) line[n++] = *c;
-    for (const char *c = " WINS"; *c; c++) line[n++] = *c;
-    line[n] = '\0';
-  } else {
-    const char *fallback = _won ? "FLEET SUNK" : "ALL HANDS LOST";
-    int n = 0;
-    for (const char *c = fallback; *c; c++) line[n++] = *c;
-    line[n] = '\0';
+    // Whose win it is, by name. "WIN" says the same thing on both panels; the
+    // name is what makes the verdict a fact about the match rather than about
+    // the screen it is drawn on.
+    const char *winner = _won ? _myName : _theirName;
+    char line[LOBBY_NAME_CHARS + 6];
+    if (winner[0] != '\0') {
+      int n = 0;
+      for (const char *c = winner; *c && n < LOBBY_NAME_CHARS; c++) line[n++] = *c;
+      for (const char *c = " WINS"; *c; c++) line[n++] = *c;
+      line[n] = '\0';
+    } else {
+      const char *fallback = _won ? "FLEET SUNK" : "ALL HANDS LOST";
+      int n = 0;
+      for (const char *c = fallback; *c; c++) line[n++] = *c;
+      line[n] = '\0';
+    }
+    _bot.text(gfx::centerTextX(line), 45, line);
+    return;
   }
-  _bot.text(gfx::centerTextX(line), 45, line);
+
+  // Both fleets, one panel each. No timer on this: somebody working out where
+  // the ships were is not on the clock, so it stays until they press.
+  drawFleetBoard(_bot, _fleet, _incoming);
+  drawGutterCount(_bot, GUTTER_L_LEFT, "YOUR", "FLEET", _fleet.remaining(), SHIP_COUNT);
+  _bot.textTiny(gfx::centerTinyIn("PRESS", GUTTER_R_LEFT, GUTTER_R_RIGHT), 24, "PRESS");
+  _bot.textTiny(gfx::centerTinyIn("TO", GUTTER_R_LEFT, GUTTER_R_RIGHT), 32, "TO");
+  _bot.textTiny(gfx::centerTinyIn("LEAVE", GUTTER_R_LEFT, GUTTER_R_RIGHT), 40, "LEAVE");
 }
 
 }  // namespace game

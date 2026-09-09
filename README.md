@@ -95,12 +95,14 @@ flowchart TB
         DOC["<b>server/README.md</b><br/>+ PROTOCOL.md<br/><i>the relay, documented</i>"]
         SRV["<b>server/main.go</b><br/>POST /v1/send<br/>GET /v1/recv /v1/rooms /v1/status<br/><i>also serves web/</i>"]
         DASH["<b>dashboard/</b><br/>log, players, force-page, CSV<br/><i>index.html + app.js + nginx</i>"]
+        RUN["<b>run.sh</b> + <b>deploy/</b><br/>pull, build, serve, systemd<br/><i>nginx for the two hostnames</i>"]
         PKT --> HUB --> TBL --> SRV
         BRD --> TBL
         PEERS --> TBL
         LOB --> SRV
         SRV --> LOG --> DASH
         SRV -.-> DOC
+        RUN -.->|"serves"| SRV
     end
     SRV -.->|"serves the page"| WMAIN
     WMAIN -.->|"packets (future)"| SRV
@@ -124,7 +126,7 @@ flowchart TB
     class ART core
     class KEYS,BTN,WMAIN,WASM,C1,C2 web
     classDef relay fill:#2d2a1f,stroke:#8f7f4a,color:#f5efe0
-    class PKT,HUB,TBL,LOB,SRV,PEERS,LOG,DASH,BRD,DOC relay
+    class PKT,HUB,TBL,LOB,SRV,PEERS,LOG,DASH,BRD,DOC,RUN relay
 ```
 
 The seam is `game::Input`. The two samplers necessarily differ &mdash; there
@@ -231,7 +233,7 @@ core, a page selected in the browser is pixel-for-pixel what the ESP32 shows.
 | Sunk | a framed announcement: the ship's name over `SUNK` | your own board |
 | Rooms | `PICK A LOBBY` and the five numbered lobbies: `N c/2` then who is in each, a tick on the one that is yours; centre joins or rejoins, holding centre leaves | the wave |
 | Returning | `RETURNING TO LOBBY` over the wave, while centre is held | the count, 5 to 1, on a blacked-out panel |
-| Over | **their** board revealed: their hulls, what sank, and every shot you spent on their water | `WIN` or `LOSE`, and the winner **by name** |
+| Over | **their** board revealed: their hulls, what sank, and every shot you spent on their water | `WIN` or `LOSE` and the winner by name for three seconds, then **your own** board beside theirs |
 | Waiting | `WAITING FOR` / their **name**, in the small font / `TO PLACE FLEET` | your own board, and `YOUR FLEET 5/5` |
 | Over | same | `WIN` or `LOSE` &mdash; every ship of one fleet is sunk |
 | Miss | same, with the new miss marked | a framed `MISS` in bubble type |
@@ -374,6 +376,9 @@ browser ticks at ~60Hz and the device at ~50Hz.
 | `dashboard/mime.types` | relay | shipped rather than included from the system, whose copy lives somewhere different on every platform |
 | `server/logbuf.go` | relay | keeps the relay's own output so the dashboard can show it |
 | `server/PROTOCOL.md` | relay | the protocol of record &mdash; packet, types, encodings, endpoints |
+| `run.sh` | deploy | pull, build, serve; `--install` makes it a systemd service that does the same at boot |
+| `deploy/grafana/` | deploy | the same dashboard in Grafana: compose file, provisioned datasource and dashboard, and what it trades away |
+| `deploy/battleship.nginx.conf` | deploy | the two public hostnames in front of the relay, with the CORS allow-list |
 | `server/README.md` | relay | the relay on its own terms: its files, how a game starts, and why the polling is shaped as it is |
 | `server/Makefile` | relay | `make -C server run` and friends |
 | `Makefile` | browser | WASM + TypeScript build, `serve`, `check` |
@@ -508,6 +513,14 @@ to carry that count into their next game and win it two ships early, and a
 stale "they are ready" let the waiting page through before the new opponent
 had said anything. `forgetMatch()` clears the lot, because the browser never
 calls `begin()` on that path -- what is not cleared there is not cleared.
+
+**The verdict is two boards, after a beat.** The bottom panel holds `WIN` or
+`LOSE` and the winner's name for `VERDICT_MS` and ignores every press while it
+does -- the press that fired the winning shot must not skip the answer to it.
+Then it becomes your own board, so the two layouts sit one above the other and
+can be compared. Nothing times out after that: somebody working out where the
+ships were is not on a clock, and the page waits for a press. The clients wait
+with it, seat or no seat.
 
 **The verdict reveals their board.** A match ends and the one thing worth
 keeping secret stops being secret, so the top panel stops being a tracking
@@ -875,6 +888,14 @@ cached copy of either used to leave a panel blank with nothing to explain it.
 `app.js` now checks for everything it needs before rendering and says so
 plainly if the page is stale.
 
+**The same three panels exist for Grafana**, in `deploy/grafana/`: the log
+down the left, the lobbies top right, the controls under them, fed by the
+Infinity datasource straight from `/v1/log` and `/v1/rooms` with no exporter
+in between. It costs two plugins and a slower refresh -- Grafana re-runs a
+query on a timer where this page long-polls -- and the controls become a form
+rather than buttons that grey themselves out. `deploy/grafana/README.md` is
+the honest comparison.
+
 It is served two ways on purpose. The relay serves `dashboard/` on 8081
 itself, so it works with nothing installed and with no CORS or proxy in the
 way. `dashboard/nginx.conf` does the same job properly &mdash; nginx serving
@@ -892,6 +913,28 @@ system. nginx's own copy lives somewhere different on every platform
 &mdash; `/opt/homebrew/etc/nginx` on Apple Silicon, `/usr/local/etc/nginx` on
 Intel, `/etc/nginx` on Debian &mdash; so an absolute include is a config that
 starts on the machine it was written on and nowhere else.
+
+### On a server
+
+    ./run.sh                    pull, build, serve: game on :8090, dashboard on :8091
+    sudo ./run.sh --install     the same, at boot, as a systemd service
+    sudo ./run.sh --nginx       battleship.nirvek.xyz and dashship.nirvek.xyz in front
+
+`run.sh` pulls, builds and serves, in that order, and the systemd unit it
+writes runs **the script** rather than the binary -- so a reboot picks up
+whatever has been pushed since. The pull is deliberately not fatal: a machine
+that comes up before its network should still start the game it already has.
+
+The relay serves both the page and the dashboard itself, so nothing else needs
+to be running for anyone on the LAN to play. `--nginx` is for the two public
+names: nginx terminates them (or a Cloudflare tunnel in front of it does) and
+proxies to the two ports, with the CORS allow-list naming both hosts. Its read
+timeout is 75s on purpose -- `/v1/recv` parks for up to 25, and a proxy that
+gives up sooner turns every quiet moment in a match into a 504.
+
+Building the page needs `emscripten`. A server without it serves a build made
+elsewhere and says so; a server with neither stops and says which three files
+to copy across.
 
 ### Behind a tunnel
 
@@ -1251,7 +1294,10 @@ and the two cursors.
 
 **On a phone the panels are the controls.** A swipe across either one is the
 direction it went, a tap is centre, two taps place a ship, and holding still
-is centre held -- which is what the countdown to leaving reads. The core is
+is centre held -- which is what the countdown to leaving reads. A mouse works
+the same way: a click is centre, holding the button is centre held, so a
+desktop player never has to know that space is the only way to answer a screen
+that says "press to leave". The core is
 never told any of this: it sees the same five levels it sees from the switch,
 so a game played with a thumb is the same game. `touch-action: none` on the
 canvases is what stops the browser claiming a swipe as a scroll.
@@ -1307,8 +1353,8 @@ joins the lobby as soon as the relay appears. Requires `emscripten` (`brew insta
 
     make test       # everything: type-check, the eleven host suites, the WASM
                     # build, the firmware, and the relay's own tests
-    make help       # the three commands that cover playing the game
-    make help debug # diagnostics, tuning, troubleshooting and everything else
+    make help       # every target, with what it is for
+    make help1      # the same startup as an ordered walkthrough
 
 ## Firmware
 

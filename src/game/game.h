@@ -220,7 +220,7 @@ private:
   void renderStarting(uint32_t nowMs);
   void renderMatch();
   void renderResult();
-  void renderOver();
+  void renderOver(uint32_t nowMs);
   void renderTargetPanel();   // the tracking grid, shared by Match and results
   void renderOwnPanel();
   // One fleet drawn as a board: hulls, the damage on them, the misses around
@@ -295,6 +295,11 @@ private:
   // the two sides of the same sinking must not both claim it.
   bool _sunkWasMine = false;
   uint32_t _resultUntil = 0;
+  // When the verdict went up. The page holds the banner for VERDICT_MS and
+  // then shows both boards; a press after that goes back to the lobby list,
+  // and no press at all leaves it there, which is what somebody studying
+  // where the ships were wants.
+  uint32_t _overSince = 0;
   uint32_t _waveUntil = 0;
 
   // ---- netplay ----
