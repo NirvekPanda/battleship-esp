@@ -42,6 +42,11 @@ SERVICE="${SERVICE:-battleship}"
 # account passwordless sudo and delete these two lines.
 SUDO_USER_NAME="${SUDO_USER_NAME:-battleship}"
 SUDO_PASS="${SUDO_PASS:-battleship}"
+# Where nginx should look for the relay, and the address the server answers on
+# for a browser typing it directly. Same box by default; set RELAY_HOST when
+# nginx runs somewhere the relay does not.
+RELAY_HOST="${RELAY_HOST:-127.0.0.1}"
+SERVER_IP="${SERVER_IP:-192.168.86.104}"
 GAME_HOST="${GAME_HOST:-battleship.nirvek.xyz}"
 DASH_HOST="${DASH_HOST:-dashship.nirvek.xyz}"
 
@@ -362,13 +367,29 @@ install_nginx() {
       -e "s|@DASH_HOST@|$DASH_HOST|g" \
       -e "s|@PORT@|$PORT|g" \
       -e "s|@DASH_PORT@|$DASH_PORT|g" \
+      -e "s|@UPSTREAM@|$RELAY_HOST|g" \
+      -e "s|@SERVER_IP@|$SERVER_IP|g" \
       deploy/battleship.nginx.conf > "$site"
 
   mkdir -p /etc/nginx/sites-enabled
   ln -sf "$site" "/etc/nginx/sites-enabled/$SERVICE"
   nginx -t
   systemctl reload nginx
-  say "$GAME_HOST -> :$PORT,  $DASH_HOST -> :$DASH_PORT"
+  say "$GAME_HOST -> $RELAY_HOST:$PORT,  $DASH_HOST -> $RELAY_HOST:$DASH_PORT"
+
+  # A 502 means nginx could not reach the relay, which is worth finding out
+  # here rather than from a browser. nginx is fine; the thing behind it is not.
+  local u
+  for u in "$RELAY_HOST:$PORT" "$RELAY_HOST:$DASH_PORT"; do
+    if curl -fsS -o /dev/null --max-time 5 "http://$u/"; then
+      say "upstream $u answers"
+    else
+      warn "upstream $u does NOT answer -- nginx will return 502 for it."
+      warn "  is the relay running?   systemctl status $SERVICE"
+      warn "  is it on another box?   sudo RELAY_HOST=$SERVER_IP ./run.sh --nginx"
+      warn "  is it bound to loopback only? it must listen on 0.0.0.0 to be reached from another container"
+    fi
+  done
 }
 
 case "${1:-serve}" in

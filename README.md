@@ -96,6 +96,7 @@ flowchart TB
         SRV["<b>server/main.go</b><br/>POST /v1/send<br/>GET /v1/recv /v1/rooms /v1/status<br/><i>also serves web/</i>"]
         DASH["<b>dashboard/</b><br/>log, players, force-page, CSV<br/><i>index.html + app.js + nginx</i>"]
         RUN["<b>run.sh</b> + <b>deploy/</b><br/>pull, build, serve, systemd<br/><i>nginx for the two hostnames</i>"]
+        DIAG["<b>deploy/diagnose.sh</b><br/>read-only: what a 502 is<br/><i>relay, nginx, tunnel, ports</i>"]
         PKT --> HUB --> TBL --> SRV
         BRD --> TBL
         PEERS --> TBL
@@ -377,6 +378,7 @@ browser ticks at ~60Hz and the device at ~50Hz.
 | `server/logbuf.go` | relay | keeps the relay's own output so the dashboard can show it |
 | `server/PROTOCOL.md` | relay | the protocol of record &mdash; packet, types, encodings, endpoints |
 | `run.sh` | deploy | pull, build, serve; `--install` makes it a systemd service that does the same at boot |
+| `deploy/diagnose.sh` | deploy | read-only check of relay, nginx, tunnel and ports; run it when the front door 502s |
 | `deploy/grafana/` | deploy | the same dashboard in Grafana: compose file, provisioned datasource and dashboard, and what it trades away |
 | `deploy/battleship.nginx.conf` | deploy | the two public hostnames in front of the relay, with the CORS allow-list |
 | `server/README.md` | relay | the relay on its own terms: its files, how a game starts, and why the polling is shaped as it is |
@@ -950,6 +952,24 @@ and delete the two lines.
 A Go that this script did not install is not its to replace: one from apt,
 brew or a version manager is reported and left where it is, and only refused
 outright if it is older than the language the relay needs.
+
+### When the front door 502s
+
+A 502 is nginx saying it could not reach the relay -- nginx itself is fine.
+`sudo ./deploy/diagnose.sh > /tmp/diag.txt 2>&1` answers, in order, whether the
+relay is running, whether it is listening on an address nginx can reach, and
+what nginx is actually proxying to. It changes nothing and redacts the admin
+token.
+
+The usual cause is nginx and the relay being in different containers: the site
+proxies to `127.0.0.1`, which inside another container is that container. Point
+it at the server instead, and make sure the relay is bound to `0.0.0.0` rather
+than loopback:
+
+    sudo RELAY_HOST=192.168.86.104 ./run.sh --nginx
+
+`--nginx` now curls both upstreams after reloading and says plainly if they do
+not answer.
 
 ### Grafana
 
