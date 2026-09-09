@@ -932,9 +932,34 @@ proxies to the two ports, with the CORS allow-list naming both hosts. Its read
 timeout is 75s on purpose -- `/v1/recv` parks for up to 25, and a proxy that
 gives up sooner turns every quiet moment in a match into a 504.
 
-Building the page needs `emscripten`. A server without it serves a build made
-elsewhere and says so; a server with neither stops and says which three files
-to copy across.
+**It installs what it needs.** The build calls `deps` first: Go from the
+official tarball into `/usr/local/go` (Debian's package is older than
+`server/go.mod` asks for), node and npm from apt for the `npx tsc` step, and
+emscripten as emsdk under `$HOME` for the WASM. Anything already present is
+left alone -- `./run.sh --deps` is the only thing that moves versions forward,
+so a reboot never changes the toolchain under a build that works.
+
+It needs root to do any of that. `run.sh` carries the private host's account
+and password (`battleship`/`battleship`) so an unattended reboot can install
+and write its unit file without a prompt. That is a credential in a file:
+anyone who can read the repo can read it, which is a deliberate trade for a
+box that is private and stays private. Set `SUDO_USER_NAME` and `SUDO_PASS`
+in the environment to override them, or give the account passwordless sudo
+and delete the two lines.
+
+A Go that this script did not install is not its to replace: one from apt,
+brew or a version manager is reported and left where it is, and only refused
+outright if it is older than the language the relay needs.
+
+### Grafana
+
+`deploy/grafana/` is the same dashboard as a Grafana stack, on port 8092 beside
+the game on 8090 and the dashboard on 8091: `cd deploy/grafana && docker
+compose up -d`. It needs no arguments -- `run.sh` writes the relay's address
+and admin token into `deploy/grafana/.env` on every start, so the token is
+never copied by hand. Grafana, Infinity and Business Forms are version-pinned
+against each other; `deploy/grafana/README.md` says why they have to move
+together.
 
 ### Behind a tunnel
 

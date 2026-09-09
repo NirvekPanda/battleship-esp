@@ -310,6 +310,9 @@ void Game::showResult(ShotResult r, uint32_t nowMs) {
 void Game::endMatch(bool won) {
   _won = won;
   _page = Page::Over;
+  // The verdict's clock starts on the next tick. Left over from an earlier
+  // match it is already expired, and the banner never shows.
+  _overSince = 0;
   _inFlight = false;
   _press.reset();
 }

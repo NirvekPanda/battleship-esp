@@ -290,6 +290,10 @@ void Game::tick(const Input &in, uint32_t nowMs) {
       if ((int32_t)(nowMs - _resultUntil) >= 0 || _press.edge()) {
         // The last announcement of the match is followed by the verdict, not
         // by the board: there is nothing left to shoot at.
+        // Straight to the verdict, so its clock has to be restarted here too:
+        // a stale _overSince from the last match is already past VERDICT_MS
+        // and would skip the banner entirely.
+        if (_pendingOver) _overSince = 0;
         _page = _pendingOver ? Page::Over : Page::Match;
         _pendingOver = false;
         _press.reset();
@@ -307,7 +311,12 @@ void Game::tick(const Input &in, uint32_t nowMs) {
       if (!banner && _press.edge()) {
         forgetMatch();
         _myRoom = 0;
-        _page = Page::Rooms;
+        // Through setPage, not by assignment: it is what tells the rooms page
+        // that the button is already down, so the release of this very press
+        // is not read there as the release that joins a lobby. And the seat
+        // has to be given back -- every other way out of a match does that.
+        _roomLeave = true;
+        setPage(Page::Rooms);
       }
       break;
     }

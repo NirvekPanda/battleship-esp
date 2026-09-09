@@ -128,12 +128,10 @@ void loop() {
   // owe ourselves a reset". Trying to hold this in wasSeated instead meant
   // the very next line cleared it, so the reset never came and the board sat
   // on the verdict for ever -- the flag has to outlive the pass that sets it.
-  static uint32_t seatLostAt = 0;
   static bool resetPending = false;
   static bool wasSeated = false;
   if (wasSeated && !netSeated()) {
     resetPending = true;
-    seatLostAt = now;
   }
   wasSeated = netSeated();
 

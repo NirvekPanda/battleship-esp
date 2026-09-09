@@ -159,7 +159,10 @@ function touchControls(el: HTMLElement) {
     e.preventDefault();
     touched.centre = true;
   });
-  const release = () => { touched.centre = false; };
+  // Input is sampled once a frame, so a click whose down and up both land
+  // between two frames would never be seen at all. Release through pulse,
+  // which holds the button for 120ms the way a tap does.
+  const release = () => { if (touched.centre) pulse("centre", 120); };
   el.addEventListener("mouseup", release);
   el.addEventListener("mouseleave", release);
   addEventListener("blur", release);
@@ -766,9 +769,6 @@ async function pollForever() {
       const res = await fetch(`/v1/recv?since=${cursor}`, {
         headers: { "X-Peer-Token": seat },
       });
-      // The seat is gone -- the relay restarted, or the seats were cleared.
-      // Claim a new one rather than retrying a token nobody recognises for
-      // ever, which is what the firmware does too.
       // The seat is gone: the relay restarted, or -- the ordinary case now --
       // the match ended and its room was cleared. Either way this game is
       // over, so the core is reset and the player goes back to the lobby
@@ -778,13 +778,17 @@ async function pollForever() {
         // The verdict first. A match ends by the relay clearing the lobby,
         // which invalidates the seat -- so the 401 that tells us the game is
         // over arrives a moment after the WIN or LOSE goes up, and resetting
-        // on it took the answer off the screen before it could be read.
-        // For as long as they are still looking at it. The verdict page shows
-        // the answer, then both boards, and leaves when the player presses --
-        // so the seat being gone is not a reason to take it away from them.
+        // on it took the answer off the screen before it could be read. The
+        // verdict page shows the answer, then both boards, and leaves when
+        // the player presses -- so the seat being gone is not a reason to
+        // take that away from them.
         while (sim._sim_page() === PAGE.over) {
           await new Promise((r) => setTimeout(r, 250));
         }
+        // That wait has no bound, so the world may have moved on underneath
+        // it -- a reset, a new lobby. Tearing state down now would undo work
+        // the player has since started.
+        if (mine !== pollGeneration || peerToken !== seat) return;
         console.info("relay: seat lost, back to the lobby");
         peerToken = "";
         myRoom = 0;

@@ -13,3 +13,7 @@ include/secrets.h
 # nginx runtime files for the dashboard
 dashboard/tmp/
 dashboard/nginx.pid
+
+# Written by run.sh: the relay admin token, and the compose env holding it
+.admin-token
+deploy/grafana/.env

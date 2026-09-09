@@ -1,19 +1,29 @@
 # Grafana, pointed at the relay.
 #
-#   cd deploy/grafana && RELAY=http://192.168.86.220:8090 ADMIN_TOKEN=... docker compose up -d
+#   cd deploy/grafana && docker compose up -d      ->  http://localhost:8092
+#
+# No arguments: run.sh writes RELAY, ADMIN_TOKEN and GRAFANA_PORT into .env
+# beside this file every time it starts, so the token is never copied by hand.
 #
 # Two plugins do the work: Infinity reads the relay's JSON straight from its
 # HTTP endpoints (no exporter, no database), and Business Forms turns a panel
 # into buttons that POST back to it. Everything else is stock Grafana.
 services:
   grafana:
-    image: grafana/grafana:11.3.0
+    image: grafana/grafana:12.4.10
     container_name: battleship-grafana
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # 8092 on the host, beside the game on 8090 and the dashboard on 8091.
+      - "${GRAFANA_PORT:-8092}:3000"
     environment:
-      GF_INSTALL_PLUGINS: "yesoreyeram-infinity-datasource,volkovlabs-form-panel"
+      # Pinned, both of them. Unversioned, Grafana installs the newest build,
+      # which is how this broke before: Infinity 4.x imports react/jsx-runtime
+      # and only Grafana >=11.6.11 hands that to a plugin, so an 11.3 image
+      # answered the import with a 404 and the datasource failed to load.
+      # Infinity 4.0.0 needs >=12.2.5, Business Forms 6.3.5 needs >=12.3.0 --
+      # the image above satisfies both. Move the three together or not at all.
+      GF_INSTALL_PLUGINS: "yesoreyeram-infinity-datasource 4.0.0,volkovlabs-form-panel 6.3.5"
       # The relay and its admin token, read by the provisioned datasource.
       RELAY_URL: "${RELAY:-http://host.docker.internal:8090}"
       RELAY_ADMIN_TOKEN: "${ADMIN_TOKEN:-}"

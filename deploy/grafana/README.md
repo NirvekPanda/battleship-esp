@@ -3,9 +3,25 @@
 Same three areas as `dashboard/`: the server output down the left half, who is
 in each lobby top right, the controls under it.
 
-    cd deploy/grafana
-    RELAY=http://192.168.86.220:8090 ADMIN_TOKEN=<the relay's token> docker compose up -d
-    # http://localhost:3000  ->  "Battleship relay"
+    ./run.sh                        # the relay, and the token Grafana needs
+    cd deploy/grafana && docker compose up -d
+    # http://localhost:8092  ->  "Battleship relay"
+
+No arguments and nothing to paste. `run.sh` keeps the admin token in
+`.admin-token` and writes it, the relay's address and the port into
+`deploy/grafana/.env` every time it starts; compose reads that file. The token
+is generated once and reused, because the relay invents a new one on every
+start unless it is given one -- which would have meant re-pasting it into
+Grafana after every reboot. Both files are gitignored.
+
+## Versions move together
+
+Grafana 12.4.10, Infinity 4.0.0, Business Forms 6.3.5, all pinned. Infinity
+4.x imports `react/jsx-runtime`, which only Grafana >=11.6.11 hands to a
+plugin: on an older image the import 404s and the datasource fails to load
+with a SystemJS error. Business Forms 6.3.5 needs >=12.3.0. Leaving the plugin
+versions off installs the newest build, which is exactly how that breaks --
+change the three together or not at all.
 
 ## What does the work
 
