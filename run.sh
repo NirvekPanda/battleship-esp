@@ -254,12 +254,26 @@ ensure_emcc() {
     return
   fi
 
-  command -v git >/dev/null || die "git is needed to install emscripten"
+  # None of this is fatal. build() falls back to a page that is already built
+  # and only gives up when there is none, so a compiler that cannot be
+  # installed must not take the relay down with it: as a service, dying here
+  # means systemd restarts it, it dies again, and the game never comes up
+  # although everything it actually needs to serve is sitting in web/.
+  if ! command -v git >/dev/null; then
+    warn "git is needed to install emscripten -- skipping"
+    return 0
+  fi
   say "installing emscripten into $EMSDK_DIR (this takes a few minutes)"
-  [ -d "$EMSDK_DIR" ] || git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$EMSDK_DIR"
-  ( cd "$EMSDK_DIR" && ./emsdk install latest && ./emsdk activate latest ) \
-    || die "emsdk install failed; build the page elsewhere and copy web/sim.js, web/sim.wasm and web/main.js here"
-  use_emsdk || die "emsdk installed but emcc is still not on PATH"
+  if [ ! -d "$EMSDK_DIR" ] &&
+     ! git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$EMSDK_DIR"; then
+    warn "could not create $EMSDK_DIR -- is it writable by $(id -un)?"
+    return 0
+  fi
+  if ! ( cd "$EMSDK_DIR" && ./emsdk install latest && ./emsdk activate latest ); then
+    warn "emsdk install failed -- serving whatever is already built in web/"
+    return 0
+  fi
+  use_emsdk || warn "emsdk installed but emcc is still not on PATH"
 }
 
 # Everything the build needs, in one call. UPDATE is passed through so only
@@ -341,6 +355,19 @@ install_service() {
   id -u "$user" >/dev/null 2>&1 || die "no such user: $user (set SUDO_USER_NAME)"
   local unit="/etc/systemd/system/$SERVICE.service"
 
+  # --install runs as root, so $HOME here is /root and EMSDK_DIR with it. The
+  # service runs as $user, who cannot write /root -- it would try to install
+  # emscripten there on every start, fail, and be restarted for ever. The
+  # unit gets the home of the account that will actually run it.
+  # `|| true` because of pipefail: getent is absent on some minimal images,
+  # and a pipeline that starts with a missing command returns 127, which under
+  # set -e would kill the install here rather than fall back on the next line.
+  local home
+  home="$(getent passwd "$user" 2>/dev/null | cut -d: -f6 || true)"
+  [ -n "$home" ] || home="/home/$user"
+  local unit_emsdk="$home/emsdk"
+  say "the service runs as $user (home $home)"
+
   say "writing $unit"
   cat > "$unit" <<UNIT
 [Unit]
@@ -361,7 +388,9 @@ ${ADMIN_TOKEN:+Environment=ADMIN_TOKEN=$ADMIN_TOKEN}
 # systemd hands a unit a minimal PATH and go is never on it. emscripten adds
 # itself from $EMSDK_DIR/emsdk_env.sh, which the script sources.
 Environment=PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=EMSDK_DIR=$EMSDK_DIR
+# systemd sets no HOME, and emsdk, npm and git all write under it.
+Environment=HOME=$home
+Environment=EMSDK_DIR=$unit_emsdk
 ExecStart=$REPO/run.sh
 Restart=on-failure
 RestartSec=5
