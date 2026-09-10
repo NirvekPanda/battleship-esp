@@ -1,16 +1,19 @@
 {
   "uid": "battleship",
-  "title": "Battleship relay",
+  "title": "BATTLESHIP RELAY",
   "tags": [
     "battleship"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
-  "refresh": "5s",
+  "refresh": "1s",
+  "timepicker": {
+    "hidden": true
+  },
   "time": {
-    "from": "now-15m",
+    "from": "now-5m",
     "to": "now"
   },
   "panels": [
@@ -24,7 +27,11 @@
         "x": 0,
         "y": 0
       },
-      "description": "Every line the relay prints, in columns. The lobby column separates the five games from the main lobby.",
+      "description": "Every packet the relay carried, as the terminal prints it. Without the admin token the cell and detail of a fleet line are held back -- a ship's position is the only secret in the game.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "battleship-relay"
+      },
       "targets": [
         {
           "refId": "A",
@@ -35,6 +42,7 @@
           "type": "json",
           "source": "url",
           "format": "table",
+          "parser": "backend",
           "url": "/v1/log?since=0",
           "url_options": {
             "method": "GET",
@@ -63,11 +71,6 @@
               "type": "string"
             },
             {
-              "selector": "to",
-              "text": "to",
-              "type": "string"
-            },
-            {
               "selector": "kind",
               "text": "type",
               "type": "string"
@@ -82,38 +85,45 @@
               "text": "detail",
               "type": "string"
             }
-          ]
+          ],
+          "filters": []
         }
       ],
       "options": {
         "showHeader": true,
-        "sortBy": [
-          {
-            "displayName": "when",
-            "desc": true
-          }
-        ]
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
       },
       "fieldConfig": {
         "defaults": {
           "custom": {
             "align": "left",
-            "filterable": true
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": false
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
           }
         },
         "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "lobby"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 80
-              }
-            ]
-          },
           {
             "matcher": {
               "id": "byName",
@@ -122,24 +132,106 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 180
+                "value": 118
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lobby"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "page"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 74
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "from"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 108
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 66
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cell"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 52
               }
             ]
           }
         ]
-      }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "when": 0,
+              "lobby": 1,
+              "page": 2,
+              "from": 3,
+              "type": 4,
+              "cell": 5,
+              "detail": 6
+            },
+            "renameByName": {}
+          }
+        }
+      ]
     },
     {
       "type": "table",
-      "title": "Players by lobby",
+      "title": "Main lobby",
       "id": 2,
       "gridPos": {
         "h": 11,
-        "w": 12,
+        "w": 6,
         "x": 12,
         "y": 0
       },
-      "description": "The five numbered lobbies and who is sitting in each. A row with a match id is a game in progress.",
+      "description": "The five numbered lobbies and who is sitting in each.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "battleship-relay"
+      },
       "targets": [
         {
           "refId": "A",
@@ -150,6 +242,7 @@
           "type": "json",
           "source": "url",
           "format": "table",
+          "parser": "backend",
           "url": "/v1/rooms",
           "url_options": {
             "method": "GET",
@@ -166,22 +259,43 @@
               "selector": "players",
               "text": "players",
               "type": "string"
-            },
-            {
-              "selector": "match",
-              "text": "match",
-              "type": "string"
             }
-          ]
+          ],
+          "filters": []
         }
       ],
       "options": {
-        "showHeader": true
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
       },
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "align": "left"
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": false
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
           }
         },
         "overrides": [
@@ -193,104 +307,154 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 70
+                "value": 60
               }
             ]
           }
         ]
-      }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "lobby": 0,
+              "players": 1
+            },
+            "renameByName": {}
+          }
+        }
+      ]
     },
     {
-      "type": "volkovlabs-form-panel",
-      "title": "Lobby controls",
+      "type": "table",
+      "title": "Lobby 1",
       "id": 3,
+      "gridPos": {
+        "h": 11,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "description": "The match in the lobby being watched: its seats, whether both fleets are down, and how many shots have been fired.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "battleship-relay"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "battleship-relay"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/v1/match?room=1",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "lobby",
+              "text": "lobby",
+              "type": "string"
+            },
+            {
+              "selector": "seats",
+              "text": "seats",
+              "type": "string"
+            },
+            {
+              "selector": "bothReady",
+              "text": "both ready",
+              "type": "string"
+            },
+            {
+              "selector": "shots",
+              "text": "shots",
+              "type": "number"
+            }
+          ],
+          "filters": []
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": false
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "lobby": 0,
+              "seats": 1,
+              "both ready": 2,
+              "shots": 3
+            },
+            "renameByName": {}
+          }
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "title": "Controls",
+      "id": 4,
       "gridPos": {
         "h": 11,
         "w": 12,
         "x": 12,
         "y": 11
       },
-      "description": "Server-side controls, per lobby. Every one of these needs the admin token, which the datasource sends.",
+      "description": "The relay's controls need the admin token in a request header, which Grafana keeps in the datasource, out of the browser's reach. They live on the dashboard.",
       "options": {
-        "initial": {
-          "method": "NONE",
-          "code": ""
+        "mode": "markdown",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
         },
-        "update": {
-          "method": "POST",
-          "url": "/v1/force-page?room=${lobby}&page=${page}",
-          "code": ""
-        },
-        "buttonGroup": {
-          "orientation": "center",
-          "size": "md"
-        },
-        "submit": {
-          "text": "Send to page",
-          "variant": "primary",
-          "icon": "play"
-        },
-        "reset": {
-          "text": "Restart match",
-          "variant": "destructive",
-          "icon": "repeat"
-        },
-        "resetAction": {
-          "mode": "datasource",
-          "method": "POST",
-          "url": "/v1/restart",
-          "code": ""
-        },
-        "elements": [
-          {
-            "id": "lobby",
-            "title": "Lobby",
-            "type": "select",
-            "value": "1",
-            "options": [
-              {
-                "label": "Lobby 1",
-                "value": "1"
-              },
-              {
-                "label": "Lobby 2",
-                "value": "2"
-              },
-              {
-                "label": "Lobby 3",
-                "value": "3"
-              },
-              {
-                "label": "Lobby 4",
-                "value": "4"
-              },
-              {
-                "label": "Lobby 5",
-                "value": "5"
-              }
-            ]
-          },
-          {
-            "id": "page",
-            "title": "Send both players to",
-            "type": "radio",
-            "value": "0",
-            "options": [
-              {
-                "label": "Title",
-                "value": "0"
-              },
-              {
-                "label": "Place ships",
-                "value": "2"
-              },
-              {
-                "label": "Gameplay",
-                "value": "4"
-              }
-            ]
-          }
-        ]
+        "content": "## Controls are on the dashboard\n\n### [Open the dashboard &rarr;](/)\n\nSend a lobby to a page, restart a match, take the CSV: all of it is there, on the same hostname.\n\n---\n\n**Why not here.** Every control endpoint is a POST that needs the admin token in a header. Grafana keeps that token inside the datasource, where only its backend can read it -- which is what keeps an operator credential out of the browser. A button drawn on this page runs in the browser and has no way to reach it.\n\nThis page is for watching: the log on the left, who is where on the right, both refreshed every second."
       }
     }
   ]

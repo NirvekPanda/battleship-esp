@@ -436,6 +436,7 @@ install_nginx() {
       -e "s|@DASH_PORT@|$DASH_PORT|g" \
       -e "s|@UPSTREAM@|$RELAY_HOST|g" \
       -e "s|@SERVER_IP@|$SERVER_IP|g" \
+      -e "s|@GRAFANA_PORT@|$GRAFANA_PORT|g" \
       deploy/battleship.nginx.conf > "$site"
 
   mkdir -p /etc/nginx/sites-enabled

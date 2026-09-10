@@ -991,9 +991,23 @@ not answer.
 the game on 8090 and the dashboard on 8091: `cd deploy/grafana && docker
 compose up -d`. It needs no arguments -- `run.sh` writes the relay's address
 and admin token into `deploy/grafana/.env` on every start, so the token is
-never copied by hand. Grafana, Infinity and Business Forms are version-pinned
-against each other; `deploy/grafana/README.md` says why they have to move
-together.
+never copied by hand.
+
+**https://dashship.nirvek.xyz/grafana** is the link, and it lands on the
+dashboard itself rather than on a Grafana home page. It is the same hostname
+the dashboard is on, under a path: `GF_SERVER_SERVE_FROM_SUB_PATH` tells
+Grafana it lives at `/grafana`, and nothing in front of it may strip that
+prefix -- nginx passes it through, and a Cloudflare ingress rule has to as
+well. The tunnel's rules for these hostnames are managed in the Cloudflare
+dashboard rather than in `config.yml`, so that one is set there: point
+`dashship.nirvek.xyz` at nginx on `:80` and let nginx do the routing.
+
+It shows the same three areas, but the controls are a link back to the
+dashboard rather than buttons. The relay's control endpoints need the admin
+token in a header, Grafana keeps that token in the datasource where only its
+backend can read it, and a button drawn on a Grafana panel runs in the
+browser. `deploy/grafana/README.md` has the detail, and why the versions are
+pinned to each other.
 
 ### Behind a tunnel
 
