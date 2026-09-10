@@ -100,9 +100,63 @@ const HOLD_TOUCH_MS = 250;
 // from the new origin.
 const STEP_HOLD_MS = 140;
 
-function pulse(key: "up" | "right" | "down" | "left" | "centre", ms: number) {
-  touched[key] = true;
-  setTimeout(() => { touched[key] = false; }, ms);
+type Key = "up" | "right" | "down" | "left" | "centre";
+
+// Taps used to be a bare `true` and a timeout back to `false`, one timer per
+// tap and none of them cancelling the others. Tapping faster than the timeout
+// meant each tap pushed the release further out, so the frame loop -- which
+// samples this once a frame -- never saw the button come up: a run of taps
+// arrived at the core as ONE hold that grew for as long as the tapping went
+// on. Placing five ships is a run of taps, and five seconds of unbroken
+// centre is what the core reads as "leave the game".
+//
+// So a press now always begins from a released state the loop has had a
+// chance to sample, and each key has one timer rather than a pile of them.
+const pulseTimer: Partial<Record<Key, number>> = {};
+const pulseFrame: Partial<Record<Key, number>> = {};
+
+function clearPulse(key: Key) {
+  if (pulseTimer[key] !== undefined) { clearTimeout(pulseTimer[key]); pulseTimer[key] = undefined; }
+  if (pulseFrame[key] !== undefined) { cancelAnimationFrame(pulseFrame[key]!); pulseFrame[key] = undefined; }
+}
+
+// Two frames, not one: the loop may already have run this frame, so a single
+// callback can land after a sample that still saw the key down.
+function afterARelease(key: Key, then: () => void) {
+  if (!touched[key]) { then(); return; }
+  touched[key] = false;
+  pulseFrame[key] = requestAnimationFrame(() => {
+    pulseFrame[key] = requestAnimationFrame(() => { pulseFrame[key] = undefined; then(); });
+  });
+}
+
+function pulse(key: Key, ms: number) {
+  clearPulse(key);
+  afterARelease(key, () => {
+    touched[key] = true;
+    pulseTimer[key] = window.setTimeout(() => { touched[key] = false; }, ms);
+  });
+}
+
+// A press that lasts until it is let go of -- a finger resting on the panel,
+// a mouse button held down. No timer: only the release ends it.
+function holdKey(key: Key) {
+  clearPulse(key);
+  afterARelease(key, () => { touched[key] = true; });
+}
+
+// And the release. A press already long enough to have been sampled just
+// stops; one too quick to have been seen is shown for MIN_PRESS_MS first, or
+// a fast click would do nothing at all.
+const MIN_PRESS_MS = 120;
+
+function releaseKey(key: Key, heldForMs: number) {
+  if (heldForMs >= MIN_PRESS_MS) {
+    clearPulse(key);
+    touched[key] = false;
+    return;
+  }
+  pulse(key, MIN_PRESS_MS);
 }
 
 function touchControls(el: HTMLElement) {
@@ -110,13 +164,8 @@ function touchControls(el: HTMLElement) {
 
   const end = () => {
     clearTimeout(holdTimer);
-    if (touched.centre) {          // a hold, ended by lifting the finger
-      touched.centre = false;
-      return;
-    }
-    if (!moved && performance.now() - startedAt < HOLD_TOUCH_MS) {
-      pulse("centre", 120);        // a tap is a press
-    }
+    if (moved) { clearPulse("centre"); touched.centre = false; return; }
+    releaseKey("centre", performance.now() - startedAt);
   };
 
   el.addEventListener("touchstart", (e) => {
@@ -128,7 +177,7 @@ function touchControls(el: HTMLElement) {
     // Still after a moment: the finger is holding the button down, which is
     // what the countdown to leaving a match reads.
     holdTimer = window.setTimeout(() => {
-      if (!moved) touched.centre = true;
+      if (!moved) holdKey("centre");
     }, HOLD_TOUCH_MS);
   }, { passive: false });
 
@@ -139,6 +188,7 @@ function touchControls(el: HTMLElement) {
     e.preventDefault();
     moved = true;
     clearTimeout(holdTimer);
+    clearPulse("centre");
     touched.centre = false;        // a swipe is not a press
     // The bigger movement wins, so a diagonal drag is read as the direction
     // it mostly went rather than as two directions at once.
@@ -149,20 +199,29 @@ function touchControls(el: HTMLElement) {
   }, { passive: false });
 
   el.addEventListener("touchend", (e) => { e.preventDefault(); end(); }, { passive: false });
-  el.addEventListener("touchcancel", () => { clearTimeout(holdTimer); touched.centre = false; });
+  el.addEventListener("touchcancel", () => {
+    clearTimeout(holdTimer);
+    clearPulse("centre");
+    touched.centre = false;
+  });
 
   // And the mouse, on the same terms: a click is centre, holding the button
   // down is centre held. A desktop player should not have to know that space
   // is the only way to answer a screen that says "press to leave".
+  let mouseDownAt = 0;
+  let mouseIsDown = false;
   el.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    touched.centre = true;
+    mouseDownAt = performance.now();
+    mouseIsDown = true;
+    holdKey("centre");
   });
-  // Input is sampled once a frame, so a click whose down and up both land
-  // between two frames would never be seen at all. Release through pulse,
-  // which holds the button for 120ms the way a tap does.
-  const release = () => { if (touched.centre) pulse("centre", 120); };
+  const release = () => {
+    if (!mouseIsDown) return;
+    mouseIsDown = false;
+    releaseKey("centre", performance.now() - mouseDownAt);
+  };
   el.addEventListener("mouseup", release);
   el.addEventListener("mouseleave", release);
   addEventListener("blur", release);
@@ -943,8 +1002,14 @@ declare global {
   interface Window {
     __corePage?: number; __myTurn?: number;
     __aim?: [number, number]; __inFlight?: number;
+    // The longest unbroken run of frames the centre button was down for.
+    // A tap is a handful of frames; a run that keeps climbing means separate
+    // presses are arriving as one hold, which is the bug this guards.
+    __centreDown?: boolean; __centreRunMs?: number; __centreMaxRunMs?: number;
   }
 }
+
+let centreRunFrom = 0;
 
 function frame(now: number) {
   nameBoxRefresh();
@@ -952,7 +1017,18 @@ function frame(now: number) {
   window.__myTurn = sim._sim_my_turn();
   window.__aim = [sim._sim_aim_col(), sim._sim_aim_row()];
   window.__inFlight = sim._sim_in_flight();
-  sim._sim_set_input(inputMask());
+  const mask = inputMask();
+  const centre = (mask & M.center) !== 0;
+  if (centre) {
+    if (centreRunFrom === 0) centreRunFrom = now;
+    window.__centreRunMs = now - centreRunFrom;
+    window.__centreMaxRunMs = Math.max(window.__centreMaxRunMs ?? 0, now - centreRunFrom);
+  } else {
+    centreRunFrom = 0;
+    window.__centreRunMs = 0;
+  }
+  window.__centreDown = centre;
+  sim._sim_set_input(mask);
   // Before the tick, so a press is acted on in the same frame the core sees
   // it move the cursor.
   pumpRoomPress();

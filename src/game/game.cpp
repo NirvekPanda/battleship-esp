@@ -795,14 +795,34 @@ void Game::renderResult() {
 
   const char *word = _page == Page::Miss ? "MISS" : "HIT";
   constexpr int SCALE = 3;
-  const int wx = (gfx::W - gfx::Screen::textScaledWidth(word, SCALE)) / 2 + SCALE;
-  _bot.textBubble(wx, 25, word, SCALE);
+
+  // Centred in the window the frame leaves, not on the panel: the frame eats
+  // six rows top and bottom, and centring on the panel put the word low
+  // enough to sit off-centre inside it.
+  constexpr int MARGIN = 2;
+  constexpr int BORDER = LABEL_H - 1;
+  constexpr int INNER_Y = MARGIN + BORDER;
+  constexpr int INNER_H = gfx::H - 2 * INNER_Y;
+
+  // textBubble haloes the glyphs, so it occupies a row above and below them.
+  constexpr int BUBBLE_H = 7 * SCALE + 2;
+  constexpr int NAME_H = 7;
+  constexpr int GAP = 3;
+
+  // A hit names the ship it hit, and the two are one block: centring the word
+  // alone and then hanging the name off the bottom of it is what ran the name
+  // into the word. A miss names nothing, so it is the word by itself.
+  const bool named = _page != Page::Miss;
+  const int blockH = named ? BUBBLE_H + GAP + NAME_H : BUBBLE_H;
+  const int top = INNER_Y + (INNER_H - blockH) / 2;
+
+  _bot.textBubble(gfx::centerScaledX(word, SCALE), top + 1, word, SCALE);
 
   // Which ship, in the small font: the bubble is capped to the grid width so
   // it cannot cover the inventory, and a 5x7 name fits under it.
-  if (_page != Page::Miss) {
+  if (named) {
     const char *name = shipName(_hitShip);
-    _bot.text(centerX(name, 1), 45, name);
+    _bot.text(centerX(name, 1), top + BUBBLE_H + GAP, name);
   }
 }
 
