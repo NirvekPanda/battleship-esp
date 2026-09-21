@@ -3,6 +3,7 @@
 #include "controls.h"
 #include "display.h"
 #include "espnow.h"
+#include "healthcheck.h"
 #include "net.h"
 #include "game/game.h"
 
@@ -13,15 +14,18 @@ game::Game gameCore;
 
 void setup() {
   Serial.begin(115200);
-  // The native USB CDC port only exists once a host opens it, so a banner
-  // printed the instant setup() runs is written into the void. Wait briefly
-  // for the monitor to attach, but never forever -- the board has to boot
-  // with nothing plugged into it.
-  const uint32_t waitUntil = millis() + 1500;
-  while (!Serial && millis() < waitUntil) delay(10);
+  // This board talks to the host through a CH340 bridge, not native USB, so
+  // Serial is "open" the moment begin() returns whether or not anything is
+  // listening -- there is no port to wait for, and the old wait-for-Serial
+  // loop the C3 needed would fall straight through. What IS needed is a
+  // moment for the bridge to settle after it asserts DTR, or the first line
+  // out is clipped. A fixed short delay, not a poll, since nothing on this
+  // side can observe the far end.
+  delay(200);
 
   controlsBegin();
   displayBegin();
+  healthCheck();
   netBegin();
   gameCore.begin();
   displayPush(gameCore.top(), gameCore.bottom());

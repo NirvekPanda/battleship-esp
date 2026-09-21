@@ -46,16 +46,18 @@ flowchart TB
         GAME --> SCREEN
     end
 
-    subgraph DEVICE["DEVICE target &mdash; ESP32-C3 (pio run)"]
+    subgraph DEVICE["DEVICE target &mdash; ESP32 / LOLIN32 Lite (pio run)"]
         direction TB
-        SW["5-way switch<br/>GPIO 1/2/3/10/20"]
+        SW["5-way switch<br/>GPIO 32/33/25/26/27"]
         SER["serial monitor<br/><i>arrows / WASD / Space</i>"]
         CTRL["<b>include/controls.h</b><br/>controlsPoll()<br/>GPIO OR keystrokes<br/><i>rotates the switch</i>"]
         DMAIN["<b>src/main.cpp</b><br/>device backend"]
         DISP["<b>include/display.h</b><br/>displayPush()<br/><i>dirty-page diff vs shadow</i><br/><i>flipPanel() per panel</i>"]
-        SOFT["<b>include/soft_ssd1306.h</b><br/>bit-banged I2C"]
-        P1["Panel 1 &mdash; top<br/>hw I2C, GPIO 6/5"]
-        P2["Panel 2 &mdash; bottom<br/>soft I2C, GPIO 8/7"]
+        SOFT["<b>include/soft_ssd1306.h</b><br/>bit-banged I2C<br/><i>probe() for the health check</i>"]
+        HC["<b>include/healthcheck.h</b><br/>boot self-test<br/><i>I2C scan + button idle</i><br/><i>static_asserts on the pin map</i>"]
+        LED["on-board LED<br/>GPIO 22<br/><i>steady = pass, blink = fail</i>"]
+        P1["Panel 1 &mdash; top<br/>hw I2C, SDA 23 / SCL 19"]
+        P2["Panel 2 &mdash; bottom<br/>soft I2C, SDA 16 / SCL 17"]
         SW --> CTRL
         NETH["<b>include/net.h</b><br/>relay over WiFi: lobby, rooms,<br/>seats, send / poll"]
         ESPN["<b>include/espnow.h</b><br/>board to board, no relay"]
@@ -63,6 +65,11 @@ flowchart TB
         CTRL --> DMAIN
         NETH --> DMAIN
         ESPN --> DMAIN
+        DMAIN --> HC
+        HC --> LED
+        HC -.->|"scans"| P1
+        HC -.->|"probes"| SOFT
+        HC -.->|"reads"| SW
         DMAIN --> DISP
         DISP --> P1
         DISP --> SOFT --> P2
@@ -112,6 +119,7 @@ flowchart TB
     CFG["<b>include/config.h</b><br/>pins + panel geometry<br/>PANEL*_ROTATION<br/>BUTTON_ROTATION<br/><i>device only</i>"] -.-> DMAIN
     CFG -.-> CTRL
     CFG -.-> DISP
+    CFG -.-> HC
     ART["<b>tools/png2bitmap.py</b><br/>ship.png &rarr; 1bpp<br/><i>build-time, run by hand</i>"] -.->|"generates<br/>ship_sprite.inc"| SPRITE
 
     DMAIN ==>|"fills"| INPUT
@@ -359,7 +367,8 @@ browser ticks at ~60Hz and the device at ~50Hz.
 | `src/main.cpp` | device | device backend: GPIO in, I2C out |
 | `include/controls.h` | device | switch sampling + serial-keyboard fallback; applies `BUTTON_ROTATION` |
 | `include/display.h` | device | pushes changed pages at each panel; applies `PANEL1_ROTATION` |
-| `include/soft_ssd1306.h` | device | bit-banged I2C driver for panel 2; `displayPages()`, `setFlipped()` |
+| `include/soft_ssd1306.h` | device | bit-banged I2C driver for panel 2; `displayPages()`, `setFlipped()`, `probe()` |
+| `include/healthcheck.h` | device | boot self-test: compile-time pin-map guards, I2C scan of both buses, per-direction button idle check, LED verdict |
 | `include/config.h` | device | pin map, panel geometry, mounting orientations, player name and the relay address |
 | `include/secrets.example.h` | device | template for `secrets.h`, which holds the WiFi credentials and is gitignored |
 | `include/net.h` | device | joins WiFi, prints the board's address, probes the relay, claims a seat, and carries packets both ways |

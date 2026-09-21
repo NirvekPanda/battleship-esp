@@ -1,13 +1,26 @@
 #pragma once
 
 // ---- Screens ----
-// The C3 has a single I2C peripheral (SOC_I2C_NUM == 1). The top panel owns
-// it; the bottom panel runs on bit-banged I2C over its own pin pair, so both
-// modules can keep the same hardwired address.
-#define I2C_SCL 0
-#define I2C_SDA 1
-#define S2_SCL 3
-#define S2_SDA 4
+// Both panels are hardwired to the same 0x3C address, so each needs its own
+// bus. The classic ESP32 does have two hardware I2C controllers, but the
+// bottom panel stays on the bit-banged bus in soft_ssd1306.h: it works, it is
+// already tuned, and moving it is a change to make deliberately rather than
+// as a side effect of a board swap.
+//
+// Pin choice on the LOLIN32 Lite header is tighter than it looks:
+//   - GPIO 6-11 are the SPI flash. Driving one does not misbehave, it stops
+//     the chip booting.
+//   - GPIO 1/3 are UART0, which is the only serial monitor this board has
+//     (there is no native USB, just the CH340 bridge).
+//   - GPIO 0/2/5/12/15 are strapping pins, sampled at reset. An OLED holding
+//     one low through its pullup at power-on picks a boot mode, not a bus.
+//   - GPIO 21 is simply not bonded out on this board.
+//   - GPIO 22 carries the on-board LED, so it is loaded and unfit for a bus.
+// What is left, free and output-capable, is 4, 13, 14, 16, 17, 18, 19, 23.
+#define I2C_SCL 19
+#define I2C_SDA 23
+#define S2_SCL 17
+#define S2_SDA 16
 #define I2C_HZ 400000
 
 #define OLED_ADDR 0x3C  // both modules, on their own separate buses
@@ -20,15 +33,26 @@
 // and applies BUTTON_ROTATION as a shift along it, so getting the handedness
 // wrong mirrors an axis at every rotation instead of turning the directions.
 // B and D are the horizontal pair, and on this switch they run the opposite
-// way round from the labels -- right is GPIO5, left is GPIO20.
-#define BTN_A 10
-#define BTN_B 5
-#define BTN_C 21
+// way round from the labels -- right is GPIO33, left is GPIO26.
+// The switch pulls to GND, so every direction pin needs an internal pullup.
+// That rules out GPIO 34/35/36/39 on the left header: they are input-only and
+// have no pullup at all, so they would float and read as random presses.
+// 25, 26, 27, 32, 33 are plain bidirectional GPIO with pullups, none of them
+// strapping pins, and they sit together on one side of the header.
+#define BTN_A 32
+#define BTN_B 33
+#define BTN_C 25
 
 // common
-#define BTN_D 20
-#define BTN_CENTER 6
+#define BTN_D 26
+#define BTN_CENTER 27
 // switch COM wires straight to GND; buttons use INPUT_PULLUP
+
+// ---- Status LED ----
+// On-board LED, wired to 3V3 through the LED, so LOW lights it.
+#define STATUS_LED 22
+#define STATUS_LED_ON LOW
+#define STATUS_LED_OFF HIGH
 
 // ---- Panel orientation ----
 // Which way up a module is mounted, named for where its header pins end up.

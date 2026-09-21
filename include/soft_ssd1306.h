@@ -3,9 +3,9 @@
 #include <Adafruit_GFX.h>
 
 // A 128x64 SSD1306 driven over bit-banged I2C, so it can live on any pin
-// pair. The C3 has only one hardware I2C controller (SOC_I2C_NUM == 1),
-// which the top panel owns; this gives the bottom panel its own bus even
-// though both modules are hardwired to the same 0x3C address.
+// pair. Both modules are hardwired to the same 0x3C address, so the bottom
+// panel needs a bus of its own; this gives it one without spending the
+// second hardware I2C controller on it.
 //
 // Open-drain signalling: release a line by making it an input (the module's
 // pullups take it high), assert it by driving it low.
@@ -97,6 +97,26 @@ public:
       stop();
     }
   }
+
+  // Is anything answering at our address? An address byte and nothing else:
+  // the peripheral either pulls SDA low for the ACK or it does not, and the
+  // transaction ends before a single command has been sent. Safe to call on
+  // a bus with no panel on it.
+  bool probe() {
+    release(_sda); release(_scl);
+    if (!start()) return false;      // a line stuck low never reaches start
+    const bool ack = wr(_addr << 1);
+    stop();
+    return ack;
+  }
+
+  // Do the two lines rest high when nobody is driving them? Both idle high
+  // on a healthy bus, held there by the module's own pullups. A line reading
+  // low with the bus released means a short to ground, a pin miswired to
+  // something that drives it, or -- most often -- no module attached and no
+  // pullup anywhere.
+  bool sdaIdleHigh() { release(_sda); delayMicroseconds(10); return digitalRead(_sda) == HIGH; }
+  bool sclIdleHigh() { release(_scl); delayMicroseconds(10); return digitalRead(_scl) == HIGH; }
 
 private:
   // One command byte, in its own transaction.
