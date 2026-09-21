@@ -1,4 +1,4 @@
 [wokwi]
 version = 1
-firmware = ".pio/build/esp32-c3-devkitm-1/firmware.bin"
-elf = ".pio/build/esp32-c3-devkitm-1/firmware.elf"
+firmware = ".pio/build/lolin32_lite/firmware.bin"
+elf = ".pio/build/lolin32_lite/firmware.elf"

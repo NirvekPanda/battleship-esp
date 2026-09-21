@@ -9,7 +9,7 @@
 // gfx::Screen at each display -- all drawing happens in the portable game
 // core, which the WASM host build compiles from the same sources.
 //
-// Top panel owns the C3's single I2C peripheral; the bottom runs on a
+// Top panel owns the hardware I2C peripheral; the bottom runs on a
 // bit-banged bus, so both modules can keep the same hardwired 0x3C address.
 Adafruit_SSD1306 topPanel(SCREEN_W, SCREEN_H, &Wire, -1);
 SoftSSD1306 botPanel(S2_SDA, S2_SCL, OLED_ADDR);
@@ -42,7 +42,7 @@ void displayBegin() {
 // ---- Partial updates ----
 //
 // Sending a frame is what costs, not drawing one. A full 1024-byte panel is
-// ~92ms on the 100kHz hardware bus and ~74ms bit-banged, so pushing both
+// ~92ms on the hardware bus and ~74ms bit-banged, so pushing both
 // panels every frame caps the device near 6fps while the render itself takes
 // microseconds. Almost nothing changes between frames -- moving the crosshair
 // touches a handful of rows -- so each panel keeps a shadow copy of what it
